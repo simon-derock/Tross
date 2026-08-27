@@ -25,7 +25,8 @@ from fastapi import (
     Request,
     status,
 )
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.config import get_settings  # noqa: F401
 from app.logging_config import configure_logging, get_logger, new_trace_id
@@ -52,15 +53,16 @@ async def lifespan(app: FastAPI):
 
 # ── FastAPI App Instance ──────────────────────────────────────────────────────
 app = FastAPI(
-    title="Tross: LinkedIn Profile API",
+    title="Tross: LinkedIn Profile API — by PHILIP SIMON DEROCK",
     description=(
+        "**Assignment Submission by PHILIP SIMON DEROCK**\n\n"
         "Reverse-engineered, production-ready REST API for extracting structured LinkedIn "
         "profile information using high-fidelity Voyager client TLS impersonation.\n\n"
-        "**Open for Direct Testing**: Simply enter any LinkedIn profile URL and click Execute."
+        "**Direct Public Testing**: Enter any LinkedIn profile URL and click Execute."
     ),
     version="0.1.0",
     lifespan=lifespan,
-    docs_url="/docs",
+    docs_url=None,  # Handled by dark-mode route below
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
@@ -126,6 +128,26 @@ async def handle_scraper_error(request: Request, exc: ScraperError) -> JSONRespo
 async def root() -> RedirectResponse:
     """Redirect root path to interactive documentation."""
     return RedirectResponse(url="/docs")
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html() -> HTMLResponse:
+    """Base Swagger UI with zero-breakage Dark Mode."""
+    res = get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - Swagger UI",
+        swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
+        swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
+    )
+    dark_css = """
+    <style>
+        body { background-color: #0f172a !important; margin: 0; }
+        .swagger-ui { filter: invert(88%) hue-rotate(180deg); }
+        .swagger-ui .highlight-code, .swagger-ui .microlight, .swagger-ui img { filter: invert(100%) hue-rotate(180deg); }
+    </style>
+    """
+    html_content = res.body.decode("utf-8").replace("</head>", f"{dark_css}</head>")
+    return HTMLResponse(content=html_content)
 
 
 @app.get("/health", tags=["meta"], summary="Health Check")
