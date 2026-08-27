@@ -381,7 +381,12 @@ async def scrape_public_profile(
 
     try:
         async with AsyncSession(impersonate="chrome131", proxy=proxy_url) as session:
-            response = await session.get(url, headers=headers)
+            response = await session.get(
+                url,
+                headers=headers,
+                allow_redirects=True,
+                max_redirects=5,
+            )
 
         if response.status_code == 404:
             raise ProfileNotFoundError(

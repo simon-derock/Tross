@@ -243,10 +243,16 @@ async def scrape_profile(
             raise
 
         except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "scraper.unexpected_error", error=str(exc), vanity_slug=vanity_slug
+            logger.warning(
+                "scraper.voyager_failed_fallback_to_public",
+                error=str(exc),
+                vanity_slug=vanity_slug,
+                trace_id=trace_id,
             )
-            raise ScraperError(f"Unexpected scraping error: {exc}") from exc
+            profile = await scrape_public_profile(
+                vanity_slug=vanity_slug,
+                proxy_url=settings.proxy_url,
+            )
     else:
         # No credentials configured — directly use anonymous public guest scraper
         logger.info(
