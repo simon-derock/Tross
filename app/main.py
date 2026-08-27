@@ -4,13 +4,14 @@ app/main.py
 FastAPI application — Production ASGI entry point for Tross.
 
 Endpoints:
-  GET  /              — Interactive Dark-Mode Web Playground
+  GET  /              — Redirects to /docs
+  GET  /docs         — Interactive Swagger UI (Nord Dark Theme)
+  GET  /redoc        — ReDoc 3-Column API Documentation
   POST /api/scrape   — Scrape a LinkedIn profile (body JSON)
   GET  /api/scrape   — Scrape a LinkedIn profile (query param ?url=...)
   POST /scrape       — Alias route
   GET  /scrape       — Alias route
   GET  /health       — Health check (open)
-  GET  /docs         — OpenAPI documentation
 
 Authentication:
   Supports 'X-API-Key' header, 'Authorization: Bearer <key>' header,
@@ -31,7 +32,8 @@ from fastapi import (
     Security,
     status,
 )
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
@@ -41,7 +43,6 @@ from app.network import (
     ProfileNotFoundError,
     RateLimitError,
 )
-from app.playground import get_playground_html
 from app.schemas import ErrorResponse, ProfileResponse, ScrapeRequest
 from app.scraper import ScraperError, scrape_profile
 
@@ -67,8 +68,8 @@ app = FastAPI(
     ),
     version="0.1.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None,  # Handled by custom dark-theme route below
+    redoc_url=None,  # Handled by custom route below
     openapi_url="/openapi.json",
 )
 
@@ -162,24 +163,45 @@ async def handle_scraper_error(request: Request, exc: ScraperError) -> JSONRespo
     )
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── Documentation & Navigation Routes ─────────────────────────────────────────
 
 
-@app.get(
-    "/",
-    response_class=HTMLResponse,
-    tags=["meta"],
-    summary="Interactive Web Playground",
-)
-async def playground() -> HTMLResponse:
-    """Serve the modern Dark-Mode Web Playground single-page application."""
-    return HTMLResponse(content=get_playground_html(), status_code=status.HTTP_200_OK)
+@app.get("/", include_in_schema=False)
+async def root() -> RedirectResponse:
+    """Redirect root path to interactive documentation."""
+    return RedirectResponse(url="/docs")
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    """Built-in Swagger UI with Nord Dark theme."""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - Swagger UI",
+        oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+        swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
+        swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-themes@3.0.0/themes/3.x/theme-nord.css",
+        swagger_ui_parameters={"syntaxHighlight.theme": "nord"},
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+async def custom_redoc_html():
+    """Built-in ReDoc 3-column documentation."""
+    return get_redoc_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - ReDoc",
+        redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js",
+    )
 
 
 @app.get("/health", tags=["meta"], summary="Health Check")
 async def health() -> dict[str, str]:
     """Returns 200 OK when the service is healthy. No auth required."""
     return {"status": "ok", "service": "tross"}
+
+
+# ── Scraper Endpoints ─────────────────────────────────────────────────────────
 
 
 @app.post(

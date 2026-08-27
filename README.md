@@ -8,7 +8,7 @@
 
 > **Tross** is a high-precision, production-ready backend API that reverse-engineers LinkedIn's internal **Voyager REST API**. It accepts a LinkedIn profile URL over an HTTPS POST or GET request and returns comprehensive, structured, typed JSON profile data.
 >
-> Features an **Interactive Dark-Mode Web Playground at `/`**, **4-Tier Anti-Fragile Failover Engine** (zero demo downtime), **In-Memory LRU Caching (<5ms)**, and **curl_cffi** (Chrome 131 TLS impersonation). Deployed serverless on **Vercel**.
+> Built with **Python 3.12+**, **FastAPI**, **curl_cffi** (Chrome 131 TLS impersonation), and native **Swagger UI with Nord Dark Theme** (`/docs`). Deployed serverless on **Vercel**.
 
 ---
 
