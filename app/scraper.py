@@ -1,121 +1,133 @@
 """
 app/scraper.py
 ──────────────
-High-level scraping orchestrator.
-Ties together: SessionCache → LinkedInClient → parse_profile.
+High-level LinkedIn Scraping Orchestrator.
 
 Flow:
-  1. Load cookies from Redis (or fall back to env-configured cookies).
-  2. Fetch LinkedIn profile page via HTTPX with proxy + retries.
-  3. On 401/403 → invalidate Redis cache, raise AuthenticationError.
-  4. Parse HTML into ProfileResponse via parser.py.
-  5. Return structured ProfileResponse.
+  1. Extract vanity slug from LinkedIn profile URL (e.g. 'satyanadella').
+  2. Instantiate VoyagerClient using session credentials (LI_AT / JSESSIONID) from Settings.
+  3. Fetch raw Voyager profileView JSON via curl_cffi Chrome 131 session.
+  4. Parse and normalize JSON into PhantomBuster-compliant ProfileResponse model.
+  5. Attach per-request trace_id and return.
 """
 
 from __future__ import annotations
 
-import httpx
+import re
+from urllib.parse import urlparse
 
 from app.config import get_settings
 from app.logging_config import get_logger, new_trace_id
-from app.network import LinkedInClient
-from app.parser import parse_profile
+from app.network import (
+    AuthenticationError,
+    ProfileNotFoundError,
+    RateLimitError,
+    VoyagerAPIError,
+    VoyagerClient,
+)
+from app.parser import parse_voyager_profile
 from app.schemas import ProfileResponse
-from app.session import SessionCache
 
 logger = get_logger(__name__)
 
 
-class AuthenticationError(Exception):
-    """Raised when LinkedIn returns 401/403 — cookies are expired."""
-
-
 class ScraperError(Exception):
-    """Raised on non-retryable scraping failure."""
+    """Base exception for scraping orchestration errors."""
+
+
+def extract_vanity_slug(linkedin_url: str) -> str:
+    """
+    Extract the vanity identifier / username from a LinkedIn profile URL.
+
+    Examples:
+      • https://www.linkedin.com/in/satyanadella/ -> satyanadella
+      • https://linkedin.com/in/john-doe-123?miniProfileUrn=... -> john-doe-123
+      • https://www.linkedin.com/in/jane-doe#experience -> jane-doe
+
+    Raises:
+      ValueError: If the URL does not contain a valid /in/ vanity slug.
+    """
+    clean_url = linkedin_url.strip()
+    parsed = urlparse(clean_url)
+    path = parsed.path.rstrip("/")
+
+    match = re.search(r"/in/([^/?#]+)", path)
+    if not match:
+        raise ValueError(
+            f"Invalid LinkedIn profile URL '{linkedin_url}'. Expected path format '/in/<username>'."
+        )
+
+    slug = match.group(1).strip()
+    if not slug:
+        raise ValueError(f"Empty member vanity slug extracted from '{linkedin_url}'.")
+
+    return slug
 
 
 async def scrape_profile(linkedin_url: str) -> ProfileResponse:
     """
-    Scrape a LinkedIn profile URL and return a structured ProfileResponse.
+    Scrape a LinkedIn profile URL using reverse-engineered Voyager API endpoints.
 
     Args:
-        linkedin_url: Validated LinkedIn profile URL (from ScrapeRequest).
+        linkedin_url: Validated LinkedIn profile URL.
 
     Returns:
-        ProfileResponse populated with all extractable fields.
+        ProfileResponse populated with all extracted profile fields.
 
     Raises:
-        AuthenticationError: If LinkedIn responds 401/403.
-        ScraperError: On permanent fetch failure (404, bad HTML, etc.).
+        AuthenticationError: If backend session cookies (li_at / JSESSIONID) are invalid or expired.
+        ProfileNotFoundError: If the target LinkedIn profile does not exist (HTTP 404).
+        RateLimitError: If LinkedIn rate limits the request (HTTP 429 / 999).
+        ScraperError: On other upstream API or network failures.
     """
     trace_id = new_trace_id()
     settings = get_settings()
 
-    logger.info("scraper.start", url=linkedin_url, trace_id=trace_id)
+    vanity_slug = extract_vanity_slug(linkedin_url)
+    logger.info(
+        "scraper.start",
+        url=linkedin_url,
+        vanity_slug=vanity_slug,
+        trace_id=trace_id,
+    )
 
-    # ── 1. Resolve cookies (Redis cache → env fallback) ───────────────────────
-    cache = SessionCache(str(settings.upstash_redis_url))
-    cookies = await cache.get_cookies()
-
-    if cookies is None:
-        cookies = {
-            "li_at": settings.li_at,
-            "JSESSIONID": f'"{settings.jsessionid}"',
-        }
-        logger.info("scraper.using_env_cookies")
-    else:
-        logger.info("scraper.using_cached_cookies")
-
-    # ── 2. Fetch profile page ─────────────────────────────────────────────────
     try:
-        async with LinkedInClient(
-            cookies=cookies,
+        async with VoyagerClient(
+            li_at=settings.li_at,
+            jsessionid=settings.jsessionid,
             proxy_url=settings.proxy_url,
             max_retries=settings.max_retries,
             backoff_seconds=settings.retry_backoff_seconds,
         ) as client:
-            response = await client.get(linkedin_url)
+            raw_data = await client.get_profile_view(vanity_slug)
 
-    except httpx.HTTPStatusError as exc:
-        status = exc.response.status_code
-        logger.error("scraper.http_error", status=status, url=linkedin_url)
-        if status in (401, 403):
-            await cache.invalidate()
-            raise AuthenticationError(
-                f"LinkedIn rejected cookies (HTTP {status}). "
-                "Please refresh li_at / JSESSIONID."
-            ) from exc
-        raise ScraperError(f"HTTP {status} fetching {linkedin_url}") from exc
+        profile = parse_voyager_profile(
+            data=raw_data,
+            linkedin_url=linkedin_url,
+            vanity_slug=vanity_slug,
+        )
+        profile.trace_id = trace_id
+
+        logger.info(
+            "scraper.complete",
+            name=profile.full_name,
+            vanity_slug=vanity_slug,
+            trace_id=trace_id,
+            experience_count=len(profile.experience),
+            skills_count=len(profile.skills),
+        )
+        return profile
+
+    except (AuthenticationError, ProfileNotFoundError, RateLimitError):
+        # Re-raise domain exceptions to be handled by FastAPI exception handlers
+        raise
+
+    except VoyagerAPIError as exc:
+        logger.error("scraper.voyager_error", error=str(exc), vanity_slug=vanity_slug)
+        raise ScraperError(f"LinkedIn Voyager API error: {exc}") from exc
 
     except Exception as exc:  # noqa: BLE001
-        logger.error("scraper.network_error", error=str(exc))
-        raise ScraperError(f"Network failure: {exc}") from exc
-
-    finally:
-        await cache.close()
-
-    # ── 3. Guard non-200 ──────────────────────────────────────────────────────
-    if response.status_code == 404:
-        raise ScraperError(f"Profile not found: {linkedin_url}")
-    if response.status_code != 200:
-        raise ScraperError(
-            f"Unexpected HTTP {response.status_code} from {linkedin_url}"
+        logger.error(
+            "scraper.unexpected_error", error=str(exc), vanity_slug=vanity_slug
         )
-
-    # ── 4. Cache successful cookies for future requests ───────────────────────
-    cache2 = SessionCache(str(settings.upstash_redis_url))
-    await cache2.set_cookies(cookies)
-    await cache2.close()
-
-    # ── 5. Parse and return ───────────────────────────────────────────────────
-    html = response.text
-    profile = parse_profile(html, linkedin_url)
-    profile.trace_id = trace_id
-
-    logger.info(
-        "scraper.complete",
-        name=profile.full_name,
-        trace_id=trace_id,
-        exp_count=len(profile.experience),
-    )
-    return profile
+        raise ScraperError(f"Unexpected scraping error: {exc}") from exc
