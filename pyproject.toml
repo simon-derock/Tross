@@ -1,7 +1,7 @@
 [project]
 name = "tross"
 version = "0.1.0"
-description = "LinkedIn Scraper API - PhantomBuster-compatible profile data extraction"
+description = "LinkedIn Scraper API - Pure reverse-engineered profile data extraction"
 requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4>=4.15.0",

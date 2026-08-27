@@ -6,7 +6,7 @@ LinkedIn profile data extraction and normalization engine.
 Primary Strategy:
   Directly parse pure JSON payloads from LinkedIn's internal Voyager REST API
   (e.g. GET /voyager/api/identity/profiles/{slug}/profileView or Dash entities)
-  and map them into a PhantomBuster-compliant Pydantic schema (ProfileResponse).
+  and map them into a typed Pydantic schema (ProfileResponse).
 
 Fallback Strategy:
   BeautifulSoup4 HTML CSS selector parsing when HTML content is passed.
@@ -128,7 +128,7 @@ def parse_voyager_profile(
 ) -> ProfileResponse:
     """
     Parse a raw LinkedIn Voyager API JSON response (profileView or Dash entities)
-    into a complete, PhantomBuster-compliant ProfileResponse model.
+    into a complete, structured ProfileResponse model.
 
     Args:
         data: Dict containing parsed JSON from LinkedIn Voyager REST API.

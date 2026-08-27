@@ -6,7 +6,7 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Tests](https://img.shields.io/badge/tests-97%20passed-brightgreen.svg)]()
 
-> **Tross** is a high-precision, production-ready backend API that reverse-engineers LinkedIn's internal **Voyager REST API**. It accepts a LinkedIn profile URL over an HTTPS POST request and returns structured, typed JSON data adhering to the [PhantomBuster LinkedIn Profile Scraper](https://phantombuster.com/automations/linkedin/5589386912058181/linkedin-profile-scraper) schema.
+> **Tross** is a high-precision, production-ready backend API that reverse-engineers LinkedIn's internal **Voyager REST API**. It accepts a LinkedIn profile URL over an HTTPS POST or GET request and returns comprehensive, structured, typed JSON profile data.
 >
 > Built with **Python 3.12+**, **FastAPI**, **curl_cffi** (Chrome 131 TLS impersonation), and deployed as a serverless function on **Vercel**.
 
@@ -49,7 +49,7 @@ Tross Normalization & Extraction Engine
        │  • Parses structured date ranges (Start, End / "Present")
        │  • Serializes into typed Pydantic v2 ProfileResponse
        ▼
-Client receives 200 OK with PhantomBuster-compatible JSON (< 1.5s)
+Client receives 200 OK with structured profile JSON (< 1.5s)
 ```
 
 ---

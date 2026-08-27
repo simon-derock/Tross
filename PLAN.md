@@ -1,7 +1,7 @@
 # Tross: LinkedIn Scraper API - Master Architecture Plan
 
 ## 1. Executive Objective
-Build a world-class, production-ready backend API that reverse-engineers LinkedIn profile data. It will accept a LinkedIn profile URL via an HTTPS POST request and return a structured JSON payload mirroring the PhantomBuster schema. The service will be deployed as a serverless function on Vercel, built with Python 3.12+ and FastAPI, and managed entirely with `uv`.
+Build a world-class, production-ready backend API that reverse-engineers LinkedIn profile data. It will accept a LinkedIn profile URL via an HTTPS POST request and return a structured JSON payload. The service will be deployed as a serverless function on Vercel, built with Python 3.12+ and FastAPI, and managed entirely with `uv`.
 
 ## 2. Core Architecture & Guardrails
 - **Framework:** Python 3.12+ / FastAPI.
@@ -31,7 +31,7 @@ Build a world-class, production-ready backend API that reverse-engineers LinkedI
   - Primary Strategy: Parse the embedded Voyager JSON state objects (`<code>` tags) to extract raw GraphQL payloads. 
   - Fallback Strategy: BeautifulSoup4 CSS selectors.
 - **Data Serialization:** 
-  - Strict Pydantic output schemas mapped exactly to PhantomBuster parameters (Name, Headline, Location, About, Experience, Education, Skills, Certifications, Languages, Profile Image).
+  - Strict Pydantic output schemas (Name, Headline, Location, About, Experience, Education, Skills, Certifications, Languages, Profile Image).
 
 ## 5. Security & Telemetry
 - **Endpoint Protection:** The inbound POST endpoint (`/api/scrape`) will require internal API key authentication via headers to prevent unauthorized public execution and credential burning.
@@ -49,7 +49,7 @@ Build a world-class, production-ready backend API that reverse-engineers LinkedI
 - Configure `structlog` for sanitized JSON output.
 
 ### Phase 3: Schema & TDD Base (Worktree: `wt-schema`)
-- Define PhantomBuster-compliant Pydantic schemas.
+- Define comprehensive Pydantic schemas.
 - Write strict JSON fixture tests and endpoint behavior tests.
 
 ### Phase 4: Core Network Engine (Worktree: `wt-network`)

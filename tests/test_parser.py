@@ -4,7 +4,7 @@ tests/test_parser.py
 Unit tests for LinkedIn Voyager API JSON and HTML parsing engine.
 
 Test coverage:
-  • Full profileView JSON payload mapping against PhantomBuster schema
+  • Full profileView JSON payload mapping against ProfileResponse schema
   • Nested position groups (multiple roles at same company)
   • Start/end date formatting and active role "Present" resolution
   • Education with school universal URLs
