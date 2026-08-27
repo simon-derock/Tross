@@ -1,15 +1,15 @@
 """
 app/main.py
 ───────────
-FastAPI application — the core ASGI entry point for Tross.
+FastAPI application — Production ASGI entry point for Tross.
 
 Endpoints:
-  POST /api/scrape   — Scrape a LinkedIn profile (API key protected)
-  GET  /health       — Health check (unauthenticated)
+  POST /api/scrape   — Scrape a LinkedIn profile (X-API-Key protected)
+  GET  /health       — Health check (open)
+  GET  /docs         — OpenAPI documentation
 
 Security:
-  All /api/* routes require X-API-Key header matching INTERNAL_API_KEY env var.
-  Missing or wrong key → 401 Unauthorized (no credential burning).
+  Inbound POST /api/scrape requires header 'X-API-Key' matching INTERNAL_API_KEY.
 """
 
 from __future__ import annotations
@@ -21,10 +21,15 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.logging_config import configure_logging, get_logger, new_trace_id
+from app.network import (
+    AuthenticationError,
+    ProfileNotFoundError,
+    RateLimitError,
+)
 from app.schemas import ErrorResponse, ProfileResponse, ScrapeRequest
-from app.scraper import AuthenticationError, ScraperError, scrape_profile
+from app.scraper import ScraperError, scrape_profile
 
-# ── Startup ───────────────────────────────────────────────────────────────────
+# ── Startup & Lifecycle ───────────────────────────────────────────────────────
 
 
 @asynccontextmanager
@@ -38,8 +43,11 @@ async def lifespan(app: FastAPI):  # noqa: ANN001
 
 app = FastAPI(
     title="Tross — LinkedIn Scraper API",
-    description="PhantomBuster-compatible LinkedIn profile data extraction.",
-    version="0.1.0",
+    description=(
+        "Production-ready, reverse-engineered LinkedIn profile scraper API. "
+        "Accepts a LinkedIn profile URL and returns structured JSON conforming to PhantomBuster schema."
+    ),
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -48,7 +56,7 @@ app = FastAPI(
 logger = get_logger(__name__)
 
 
-# ── Auth dependency ───────────────────────────────────────────────────────────
+# ── Auth Dependency ───────────────────────────────────────────────────────────
 
 
 async def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> None:
@@ -61,7 +69,7 @@ async def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> Non
         )
 
 
-# ── Exception handlers ────────────────────────────────────────────────────────
+# ── Exception Handlers ────────────────────────────────────────────────────────
 
 
 @app.exception_handler(AuthenticationError)
@@ -73,7 +81,33 @@ async def auth_error_handler(
         status_code=status.HTTP_401_UNAUTHORIZED,
         content=ErrorResponse(
             detail=str(exc),
-            status_code=401,
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(ProfileNotFoundError)
+async def not_found_handler(
+    request: Request, exc: ProfileNotFoundError
+) -> JSONResponse:
+    logger.warning("api.profile_not_found", detail=str(exc))
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content=ErrorResponse(
+            detail=str(exc),
+            status_code=status.HTTP_404_NOT_FOUND,
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(RateLimitError)
+async def rate_limit_handler(request: Request, exc: RateLimitError) -> JSONResponse:
+    logger.error("api.rate_limit_error", detail=str(exc))
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content=ErrorResponse(
+            detail=str(exc),
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         ).model_dump(),
     )
 
@@ -85,7 +119,7 @@ async def scraper_error_handler(request: Request, exc: ScraperError) -> JSONResp
         status_code=status.HTTP_502_BAD_GATEWAY,
         content=ErrorResponse(
             detail=str(exc),
-            status_code=502,
+            status_code=status.HTTP_502_BAD_GATEWAY,
         ).model_dump(),
     )
 
@@ -93,9 +127,9 @@ async def scraper_error_handler(request: Request, exc: ScraperError) -> JSONResp
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
-@app.get("/health", tags=["meta"], summary="Health check")
+@app.get("/health", tags=["meta"], summary="Health Check")
 async def health() -> dict[str, str]:
-    """Returns 200 OK when the service is up. No auth required."""
+    """Returns 200 OK when the service is healthy. No auth required."""
     return {"status": "ok", "service": "tross"}
 
 
@@ -106,22 +140,36 @@ async def health() -> dict[str, str]:
     summary="Scrape a LinkedIn profile",
     dependencies=[Depends(verify_api_key)],
     responses={
-        200: {"description": "Profile scraped successfully"},
+        200: {
+            "description": "Profile scraped successfully",
+            "model": ProfileResponse,
+        },
         401: {
             "model": ErrorResponse,
-            "description": "Bad API key or expired LinkedIn cookies",
+            "description": "Bad API key or invalid backend LinkedIn credentials",
         },
-        422: {"description": "Invalid request body"},
-        502: {"model": ErrorResponse, "description": "LinkedIn fetch or parse failure"},
+        404: {
+            "model": ErrorResponse,
+            "description": "LinkedIn profile does not exist",
+        },
+        422: {"description": "Validation error (e.g. invalid LinkedIn URL)"},
+        429: {
+            "model": ErrorResponse,
+            "description": "LinkedIn rate limit exceeded",
+        },
+        502: {
+            "model": ErrorResponse,
+            "description": "LinkedIn upstream gateway failure",
+        },
     },
 )
 async def scrape(body: ScrapeRequest) -> ProfileResponse:
     """
     Scrape a LinkedIn profile URL and return structured JSON data.
 
-    Requires:
-      - `X-API-Key` header matching the `INTERNAL_API_KEY` env var.
-      - Body: `{"linkedin_url": "https://www.linkedin.com/in/<slug>"}`
+    **Requirements:**
+      - Header `X-API-Key: <INTERNAL_API_KEY>`
+      - Body `{"linkedin_url": "https://www.linkedin.com/in/<vanity_slug>/"}`
     """
     trace_id = new_trace_id()
     logger.info("api.scrape.request", url=body.linkedin_url, trace_id=trace_id)
@@ -132,6 +180,7 @@ async def scrape(body: ScrapeRequest) -> ProfileResponse:
     logger.info(
         "api.scrape.response",
         name=profile.full_name,
+        profile_id=profile.profile_id,
         trace_id=trace_id,
     )
     return profile
