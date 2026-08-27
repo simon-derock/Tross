@@ -32,7 +32,7 @@ class TestDocumentationEndpoints:
 
         assert response.status_code == 200
         assert "swagger-ui" in response.text
-        assert "theme-nord.css" in response.text
+        assert "background-color: #0f172a" in response.text
 
     @pytest.mark.asyncio
     async def test_redoc_endpoint_returns_200(self):
