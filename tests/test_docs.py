@@ -24,7 +24,7 @@ class TestDocumentationEndpoints:
         assert response.headers["location"] == "/docs"
 
     @pytest.mark.asyncio
-    async def test_docs_returns_swagger_ui_with_dark_theme(self):
+    async def test_docs_returns_native_swagger_ui(self):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://testserver"
         ) as client:
@@ -32,7 +32,6 @@ class TestDocumentationEndpoints:
 
         assert response.status_code == 200
         assert "swagger-ui" in response.text
-        assert "background-color: #0f172a" in response.text
 
     @pytest.mark.asyncio
     async def test_redoc_endpoint_returns_200(self):

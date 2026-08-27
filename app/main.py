@@ -32,8 +32,7 @@ from fastapi import (
     Security,
     status,
 )
-from fastapi.openapi.docs import get_redoc_html
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
@@ -68,8 +67,8 @@ app = FastAPI(
     ),
     version="0.1.0",
     lifespan=lifespan,
-    docs_url=None,  # Handled by custom dark-theme route below
-    redoc_url=None,  # Handled by custom route below
+    docs_url="/docs",
+    redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
 
@@ -163,240 +162,13 @@ async def handle_scraper_error(request: Request, exc: ScraperError) -> JSONRespo
     )
 
 
-# ── Documentation & Navigation Routes ─────────────────────────────────────────
+# ── Navigation & Root Redirect ────────────────────────────────────────────────
 
 
 @app.get("/", include_in_schema=False)
 async def root() -> RedirectResponse:
     """Redirect root path to interactive documentation."""
     return RedirectResponse(url="/docs")
-
-
-@app.get("/docs", include_in_schema=False)
-async def custom_swagger_ui_html() -> HTMLResponse:
-    """Built-in Swagger UI with clean Dark theme."""
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="utf-8"/>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>{app.title} - Swagger UI</title>
-        <link rel="shortcut icon" href="https://fastapi.tiangolo.com/img/favicon.png">
-        <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
-        <style>
-            html {{
-                box-sizing: border-box;
-                overflow: -moz-scrollbars-vertical;
-                overflow-y: scroll;
-            }}
-            *, *:before, *:after {{
-                box-sizing: inherit;
-            }}
-            body {{
-                margin: 0;
-                background-color: #0f172a;
-                color: #e2e8f0;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            }}
-            .swagger-ui {{
-                color: #e2e8f0;
-            }}
-            .swagger-ui .topbar {{
-                display: none;
-            }}
-            .swagger-ui .info .title,
-            .swagger-ui .info h1,
-            .swagger-ui .info h2,
-            .swagger-ui .info h3,
-            .swagger-ui .info h4,
-            .swagger-ui .info h5 {{
-                color: #f8fafc;
-            }}
-            .swagger-ui .info p,
-            .swagger-ui .info li,
-            .swagger-ui .info .base-url {{
-                color: #94a3b8;
-            }}
-            .swagger-ui .scheme-container {{
-                background: #0f172a;
-                box-shadow: none;
-                border-bottom: 1px solid #1e293b;
-            }}
-            .swagger-ui .opblock-tag {{
-                color: #f8fafc;
-                border-bottom: 1px solid #1e293b;
-            }}
-            .swagger-ui .opblock {{
-                background: #1e293b;
-                border-radius: 8px;
-                box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
-                border: 1px solid #334155;
-                margin-bottom: 12px;
-            }}
-            .swagger-ui .opblock.opblock-post {{
-                border-color: #059669;
-                background: rgba(5, 150, 105, 0.08);
-            }}
-            .swagger-ui .opblock.opblock-get {{
-                border-color: #0284c7;
-                background: rgba(2, 132, 199, 0.08);
-            }}
-            .swagger-ui .opblock .opblock-summary-operation-id,
-            .swagger-ui .opblock .opblock-summary-path,
-            .swagger-ui .opblock .opblock-summary-path__deprecated {{
-                color: #f8fafc;
-            }}
-            .swagger-ui .opblock .opblock-summary-description {{
-                color: #94a3b8;
-            }}
-            .swagger-ui .opblock-description-wrapper p,
-            .swagger-ui .opblock-external-docs-wrapper p,
-            .swagger-ui .opblock-title_normal p {{
-                color: #cbd5e1;
-            }}
-            .swagger-ui .btn {{
-                background: #1e293b;
-                color: #f8fafc;
-                border: 1px solid #475569;
-                border-radius: 6px;
-            }}
-            .swagger-ui .btn.authorize {{
-                color: #10b981;
-                border-color: #10b981;
-            }}
-            .swagger-ui .btn.authorize svg {{
-                fill: #10b981;
-            }}
-            .swagger-ui .btn.execute {{
-                background-color: #0284c7;
-                color: #fff;
-                border-color: #0284c7;
-            }}
-            .swagger-ui select {{
-                background-color: #0f172a;
-                color: #f8fafc;
-                border: 1px solid #475569;
-                border-radius: 6px;
-            }}
-            .swagger-ui input[type="text"],
-            .swagger-ui input[type="password"],
-            .swagger-ui textarea {{
-                background: #0f172a;
-                color: #f8fafc;
-                border: 1px solid #475569;
-                border-radius: 6px;
-            }}
-            .swagger-ui section.models {{
-                border: 1px solid #334155;
-                border-radius: 8px;
-                background: #1e293b;
-            }}
-            .swagger-ui section.models h4 {{
-                color: #f8fafc;
-            }}
-            .swagger-ui section.models .model-container {{
-                background: #1e293b;
-            }}
-            .swagger-ui .model-box {{
-                background: #1e293b;
-            }}
-            .swagger-ui .model {{
-                color: #e2e8f0;
-            }}
-            .swagger-ui .prop-type {{
-                color: #38bdf8;
-            }}
-            .swagger-ui .prop-format {{
-                color: #94a3b8;
-            }}
-            .swagger-ui .response-col_status {{
-                color: #f8fafc;
-            }}
-            .swagger-ui .response-col_description {{
-                color: #cbd5e1;
-            }}
-            .swagger-ui table thead tr td,
-            .swagger-ui table thead tr th {{
-                color: #94a3b8;
-                border-bottom: 1px solid #334155;
-            }}
-            .swagger-ui table.parameters tbody tr td {{
-                border-color: #334155;
-            }}
-            .swagger-ui .parameter__name,
-            .swagger-ui .parameter__type {{
-                color: #f8fafc;
-            }}
-            .swagger-ui .parameter__deprecated {{
-                color: #ef4444;
-            }}
-            .swagger-ui .tab li button.tablinks {{
-                color: #94a3b8;
-            }}
-            .swagger-ui .tab li button.tablinks.active {{
-                color: #f8fafc;
-                font-weight: bold;
-            }}
-            .swagger-ui .highlight-code pre {{
-                background: #0f172a !important;
-            }}
-            .swagger-ui .microlight {{
-                background: #0f172a !important;
-                color: #38bdf8 !important;
-            }}
-            .swagger-ui .responses-inner h4,
-            .swagger-ui .responses-inner h5 {{
-                color: #f8fafc;
-            }}
-            .swagger-ui .dialog-ux .modal-ux {{
-                background: #1e293b;
-                border: 1px solid #334155;
-                color: #f8fafc;
-            }}
-            .swagger-ui .dialog-ux .modal-ux-header {{
-                border-bottom: 1px solid #334155;
-            }}
-            .swagger-ui .dialog-ux .modal-ux-header h3 {{
-                color: #f8fafc;
-            }}
-            .swagger-ui .dialog-ux .modal-ux-content h4 {{
-                color: #cbd5e1;
-            }}
-        </style>
-    </head>
-    <body>
-        <div id="swagger-ui"></div>
-        <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
-        <script>
-        window.onload = function() {{
-            window.ui = SwaggerUIBundle({{
-                url: '{app.openapi_url}',
-                dom_id: '#swagger-ui',
-                deepLinking: true,
-                presets: [
-                    SwaggerUIBundle.presets.apis,
-                    SwaggerUIStandalonePreset
-                ],
-                layout: "BaseLayout"
-            }});
-        }};
-        </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content)
-
-
-@app.get("/redoc", include_in_schema=False)
-async def custom_redoc_html():
-    """Built-in ReDoc 3-column documentation."""
-    return get_redoc_html(
-        openapi_url=app.openapi_url,
-        title=f"{app.title} - ReDoc",
-        redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js",
-    )
 
 
 @app.get("/health", tags=["meta"], summary="Health Check")
