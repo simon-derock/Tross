@@ -9,7 +9,7 @@ preventing silent runtime crashes on Vercel.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AnyUrl, Field, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,11 +34,6 @@ class Settings(BaseSettings):
         ..., min_length=16, description="Internal bearer token for /api/scrape"
     )
 
-    # ── Upstash Redis (required) ───────────────────────────────────────────────
-    upstash_redis_url: AnyUrl = Field(
-        ..., description="Upstash Redis URL (rediss://...)"
-    )
-
     # ── Proxy Rotation (optional) ─────────────────────────────────────────────
     proxy_url: str | None = Field(
         default=None, description="Residential proxy URI (http:// or socks5://)"
@@ -54,13 +49,6 @@ class Settings(BaseSettings):
     def strip_jsessionid_quotes(cls, v: str) -> str:
         """LinkedIn sometimes wraps JSESSIONID in quotes — strip them."""
         return v.strip('"')
-
-    @field_validator("upstash_redis_url", mode="before")
-    @classmethod
-    def validate_redis_scheme(cls, v: str) -> str:
-        if not str(v).startswith(("redis://", "rediss://")):
-            raise ValueError("UPSTASH_REDIS_URL must start with redis:// or rediss://")
-        return v
 
 
 @lru_cache(maxsize=1)
