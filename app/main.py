@@ -54,10 +54,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Tross: LinkedIn Profile API — by PHILIP SIMON DEROCK",
     description=(
-        "**Assignment Submission by PHILIP SIMON DEROCK**\n\n"
-        "Reverse-engineered, production-ready REST API for extracting structured LinkedIn "
-        "profile information using high-fidelity Voyager client TLS impersonation.\n\n"
-        "**Direct Public Testing**: Enter any LinkedIn profile URL and click Execute."
+        "**Reverse-Engineered LinkedIn Profile API by PHILIP SIMON DEROCK**\n\n"
+        "Reverse-engineered, production-ready REST API for extracting structured "
+        "LinkedIn profile information using high-fidelity Voyager client TLS impersonation.\n\n"
+        "**Direct Public Testing:** Enter any LinkedIn profile URL and click **Execute**."
     ),
     version="0.1.0",
     lifespan=lifespan,
@@ -199,7 +199,7 @@ async def scrape_post(
     x_jsessionid: str | None = Header(default=None, alias="X-JSESSIONID"),
 ) -> ProfileResponse:
     """
-    Scrape a LinkedIn profile URL via POST request. Direct open access for recruiters and evaluators.
+    Scrape a LinkedIn profile URL via POST request. Direct open access for profile data extraction.
 
     **Input format:**
     ```json
