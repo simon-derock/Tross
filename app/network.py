@@ -254,25 +254,11 @@ class VoyagerClient:
                 allow_redirects=False,
             )
 
-            # Redirects to login/authwall mean session is invalid/expired
+            # Redirects to login/authwall mean session is invalid or expired
             if response.status_code in (301, 302, 303, 307, 308):
-                location = (
-                    response.headers.get("Location")
-                    or response.headers.get("location")
-                    or ""
-                )
-                if (
-                    "login" in location.lower()
-                    or "authwall" in location.lower()
-                    or "checkpoint" in location.lower()
-                ):
-                    raise AuthenticationError(
-                        f"LinkedIn session redirected to login (HTTP {response.status_code} -> {location}). "
-                        "Please provide valid li_at and JSESSIONID cookies."
-                    )
-                # If redirect is to canonical voyager url, we can treat it accordingly
                 raise AuthenticationError(
-                    f"LinkedIn session redirected unexpectedly (HTTP {response.status_code} -> {location})."
+                    "LinkedIn session credentials (LI_AT / JSESSIONID) are invalid, expired, or missing. "
+                    "Please configure valid LI_AT and JSESSIONID in .env or provide them via X-Li-At and X-JSESSIONID headers."
                 )
 
             if response.status_code in RETRYABLE_STATUS_CODES:

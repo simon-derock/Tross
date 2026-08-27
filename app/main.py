@@ -168,6 +168,10 @@ async def health() -> dict[str, str]:
             "description": "Profile scraped successfully",
             "model": ProfileResponse,
         },
+        401: {
+            "model": ErrorResponse,
+            "description": "Invalid or missing LinkedIn session credentials",
+        },
         404: {
             "model": ErrorResponse,
             "description": "LinkedIn profile does not exist",
