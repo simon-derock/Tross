@@ -255,10 +255,8 @@ class TestGetProfileView:
                 if mock_instance.get.call_args[0]
                 else None,
             )
-            assert (
-                called_url
-                == f"https://www.linkedin.com/voyager/api/identity/profiles/{FAKE_SLUG}/profileView"
-            )
+            assert "identity/dash/profiles" in called_url
+            assert f"memberIdentity={FAKE_SLUG}" in called_url
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("status_code", [401, 403])

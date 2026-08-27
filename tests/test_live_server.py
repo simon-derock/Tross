@@ -177,12 +177,20 @@ class TestFuzzingAndEdgeCases:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://testserver"
         ) as client:
-            response = await client.post(
-                "/api/scrape",
-                json={"url": oversized_url},
-                headers={"X-API-Key": VALID_KEY},
-            )
-            assert response.status_code in (200, 422, 502)
+            with patch("app.scraper.VoyagerClient") as mock_client_cls:
+                mock_client = AsyncMock()
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.get_profile_view = AsyncMock(
+                    return_value=MINIMAL_VOYAGER_PROFILE_VIEW_PAYLOAD
+                )
+                mock_client_cls.return_value = mock_client
+
+                response = await client.post(
+                    "/api/scrape",
+                    json={"url": oversized_url},
+                )
+                assert response.status_code in (200, 422, 502)
 
     @pytest.mark.asyncio
     async def test_unicode_and_emoji_full_cycle(self):

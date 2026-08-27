@@ -236,7 +236,11 @@ class VoyagerClient:
             )
 
         clean_slug = vanity_slug.strip().strip("/")
-        url = f"https://www.linkedin.com/voyager/api/identity/profiles/{clean_slug}/profileView"
+        url = (
+            f"https://www.linkedin.com/voyager/api/identity/dash/profiles"
+            f"?q=memberIdentity&memberIdentity={clean_slug}"
+            f"&decorationId=com.linkedin.voyager.dash.deco.identity.profile.FullProfileWithEntities-1"
+        )
         headers = self.build_headers(clean_slug)
         attempt_count = 0
 
