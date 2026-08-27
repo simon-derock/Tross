@@ -20,35 +20,39 @@
   - Created realistic Voyager `profileView` JSON fixtures in `tests/fixtures/voyager_payloads.py`.
   - Implemented `parse_voyager_profile` in `app/parser.py` (pure JSON extraction for Name, Headline, Location, About, highest-res Profile Image, Experience, Education, Skills, Certifications, Languages).
   - Passed 18 parser unit tests; merged to `main` and pushed.
+- [x] Phase 6 Upgrade (`feature/api-orchestrator`):
+  - Implemented `app/scraper.py` orchestrator and vanity slug extractor.
+  - Implemented `app/main.py` FastAPI app with OpenAPI docs, `X-API-Key` auth, and exception handlers.
+  - Implemented full test suites (`tests/test_scraper.py`, `tests/test_main.py`).
+  - Merged to `main` and pushed.
+- [x] Master Verification & Vercel Prep:
+  - Compiled `requirements.txt` via `uv pip compile`.
+  - Cleaned `vercel.json`.
+  - Wrote comprehensive production `README.md`.
+  - Executed complete test suite: **97 / 97 tests passing (100%)**, `ruff check` clean, `ruff format` clean.
 
 ## PRESENT
-- **Current Branch:** `main` (commit: `7cd2f0c`)
-- **Active Workstream:** Phase 6 Upgrade (`feature/api-orchestrator` in `/home/simon/wt-api`)
-- **Active Error/Exception:** None. All quality gates passing (`ruff`, `pytest`).
+- **Current Branch:** `main`
+- **Total Automated Tests:** 97 passing
+- **Lint / Formatting:** Ruff 100% clean
+- **Active Error/Exception:** None. Project is 100% complete and production-ready.
 
-## NEXT (Queue)
-1. **Phase 6 Upgrade (`wt-api` / `feature/api-orchestrator`):**
-   - Update `app/scraper.py` orchestrator to run `VoyagerClient` -> `parse_voyager_profile`.
-   - Update `app/main.py` with `/api/scrape` and `/health`.
-   - Update integration tests in `tests/test_scraper.py` and `tests/test_main.py`.
-   - Test, verify, micro-commit, push, and merge into `main`.
-2. **Master Verification & Documentation:**
-   - Compile `requirements.txt` via `uv pip compile`.
-   - Update `README.md` with complete architecture, approach, API docs, and known limitations.
-   - Run complete test suite and push final state to `origin/main`.
+## STATUS: PROJECT COMPLETE ✅
 
 ---
 
 ## Provider Handover Protocol
 
 ```xml
-<provider_handover_protocol version="2.2">
+<provider_handover_protocol version="2.3">
   <metadata>
     <project_name>Tross</project_name>
     <repository_url>https://github.com/simon-derock/Tross.git</repository_url>
     <target_runtime>Python 3.12+ (FastAPI on Vercel Serverless)</target_runtime>
     <package_manager>uv</package_manager>
     <output_schema_format>PhantomBuster LinkedIn Profile Scraper JSON</output_schema_format>
+    <status>ALL_PHASES_COMPLETE</status>
+    <total_tests>97</total_tests>
   </metadata>
 
   <system_architecture>
@@ -62,24 +66,27 @@
       <header_authenticity>Chrome 131 headers with dynamic 'x-li-page-instance', 'x-li-track', 'x-restli-protocol-version: 2.0.0', and context-aware 'Referer'.</header_authenticity>
       <retry_resilience>Tenacity exponential backoff covering HTTP 429, 500, 502, 503, 504, and HTTP 999.</retry_resilience>
     </anti_detection_stack>
-    <completed_layers>
-      <layer name="config">pydantic-settings in app/config.py (13 tests passing)</layer>
-      <layer name="network">curl_cffi Chrome 131 VoyagerClient in app/network.py (27 tests passing)</layer>
-      <layer name="parser">pure JSON parser &amp; PhantomBuster mapper in app/parser.py (18 tests passing)</layer>
-    </completed_layers>
+    <modules>
+      <module name="app.config">pydantic-settings boot validator for LI_AT, JSESSIONID, INTERNAL_API_KEY, PROXY_URL.</module>
+      <module name="app.network">VoyagerClient using curl_cffi AsyncSession with Chrome 131 impersonation and tenacity retries.</module>
+      <module name="app.parser">Pure JSON parser mapping Voyager profileView &amp; Dash entities to PhantomBuster schema.</module>
+      <module name="app.scraper">Orchestrator extracting vanity slug, executing VoyagerClient, and parsing response.</module>
+      <module name="app.main">FastAPI ASGI application with X-API-Key security, /api/scrape, and /health.</module>
+      <module name="api.index">Vercel serverless entry point re-exporting FastAPI app.</module>
+    </modules>
   </system_architecture>
 
-  <status_and_locations>
-    <active_branch>main</active_branch>
-    <worktrees>
-      <worktree path="/home/simon/wt-api" branch="feature/api-orchestrator" purpose="Scraper orchestrator and FastAPI endpoint integration" />
-    </worktrees>
-  </status_and_locations>
+  <quick_start_commands>
+    <command desc="Install dependencies">uv sync</command>
+    <command desc="Run test suite">uv run pytest -v</command>
+    <command desc="Run linter">uv run ruff check .</command>
+    <command desc="Start local dev server">uv run uvicorn app.main:app --reload --port 8000</command>
+  </quick_start_commands>
 
-  <mandatory_guidelines>
-    <rule>Always use isolated Git worktrees for features and micro-commit using Conventional Commits.</rule>
-    <rule>Always run and pass `uv run pytest &amp;&amp; uv run ruff check . &amp;&amp; uv run ruff format --check .` before merging.</rule>
-    <rule>Keep memory.md and this handover protocol updated on every merge to main.</rule>
-  </mandatory_guidelines>
+  <deployment_guide>
+    <step>Import repository into Vercel Dashboard.</step>
+    <step>Configure Environment Secrets: LI_AT, JSESSIONID, INTERNAL_API_KEY, PROXY_URL (optional).</step>
+    <step>Deploy to production.</step>
+  </deployment_guide>
 </provider_handover_protocol>
 ```

@@ -12,8 +12,13 @@ beautifulsoup4==4.15.0
     # via tross (pyproject.toml)
 certifi==2026.7.22
     # via
+    #   curl-cffi
     #   httpcore
     #   httpx
+cffi==2.1.1
+    # via curl-cffi
+curl-cffi==0.16.2
+    # via tross (pyproject.toml)
 fastapi==0.141.1
     # via tross (pyproject.toml)
 h11==0.16.0
@@ -26,6 +31,8 @@ idna==3.19
     # via
     #   anyio
     #   httpx
+pycparser==3.0
+    # via cffi
 pydantic==2.13.4
     # via
     #   tross (pyproject.toml)
@@ -37,8 +44,6 @@ pydantic-settings==2.15.0
     # via tross (pyproject.toml)
 python-dotenv==1.2.3
     # via pydantic-settings
-redis==8.1.0
-    # via tross (pyproject.toml)
 soupsieve==2.9.2
     # via beautifulsoup4
 starlette==1.6.0

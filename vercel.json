@@ -20,9 +20,10 @@
     "LI_AT": "@li_at",
     "JSESSIONID": "@jsessionid",
     "INTERNAL_API_KEY": "@internal_api_key",
-    "UPSTASH_REDIS_URL": "@upstash_redis_url",
     "PROXY_URL": "@proxy_url",
-    "LOG_LEVEL": "INFO"
+    "LOG_LEVEL": "INFO",
+    "MAX_RETRIES": "3",
+    "RETRY_BACKOFF_SECONDS": "2.0"
   },
   "headers": [
     {
