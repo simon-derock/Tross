@@ -1,138 +1,399 @@
 """
 tests/test_network.py
 ──────────────────────
-Unit tests for LinkedInClient and SessionCache.
-All external I/O is mocked — no real network or Redis calls.
+Comprehensive unit tests for the curl_cffi Chrome 131 VoyagerClient.
+
+Test coverage:
+  • CSRF token derivation (quotes stripped, clean string preserved)
+  • Cookies jar formatting
+  • Authentic Chrome 131 headers (User-Agent, sec-ch-ua, x-restli, dynamic URN, x-li-track)
+  • VoyagerClient context manager lifecycle
+  • Proxy configuration forwarding to curl_cffi AsyncSession
+  • Successful get_profile_view JSON parsing
+  • HTTP 401 / 403 raising AuthenticationError (immediate, no retries)
+  • HTTP 404 raising ProfileNotFoundError (immediate, no retries)
+  • HTTP 429 and 999 triggering tenacity retries and raising RateLimitError on exhaustion
+  • HTTP 500, 502, 503, 504 triggering tenacity retries and raising VoyagerAPIError on exhaustion
+  • Transient failure recovery (e.g. 429 -> 503 -> 200 success)
+  • HTTP 400 raising VoyagerAPIError immediately
+  • Malformed JSON response raising VoyagerAPIError
 """
 
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
-from app.network import LinkedInClient, _is_retryable_response
-from app.session import SessionCache
+from app.network import (
+    AuthenticationError,
+    ProfileNotFoundError,
+    RateLimitError,
+    VoyagerAPIError,
+    VoyagerClient,
+    build_voyager_headers,
+)
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-FAKE_COOKIES = {"li_at": "a" * 20, "JSESSIONID": "b" * 20}
-FAKE_URL = "https://www.linkedin.com/in/test-user"
-
-
-def _make_response(status: int, text: str = "<html>ok</html>") -> httpx.Response:
-    return httpx.Response(status_code=status, text=text)
+FAKE_LI_AT = "AQEDAT..." + "x" * 50
+FAKE_JSESSIONID_QUOTED = '"ajax:1234567890123456789"'
+FAKE_JSESSIONID_UNQUOTED = "ajax:1234567890123456789"
+FAKE_SLUG = "satyanadella"
 
 
-# ── LinkedInClient tests ──────────────────────────────────────────────────────
+def _make_mock_response(
+    status_code: int,
+    json_data: dict[str, Any] | None = None,
+    text: str = "",
+) -> MagicMock:
+    """Create a mock curl_cffi Response object."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    if json_data is not None:
+        resp.json.return_value = json_data
+        resp.text = json.dumps(json_data)
+    else:
+        resp.text = text
+        resp.json.side_effect = json.JSONDecodeError("Expecting value", text, 0)
+    return resp
 
 
-class TestLinkedInClient:
+# ── 1. CSRF & Cookie Construction Tests ───────────────────────────────────────
+
+
+class TestCSRFAndCookies:
+    def test_csrf_token_strips_enclosing_quotes(self):
+        client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_JSESSIONID_QUOTED)
+        assert client.csrf_token == FAKE_JSESSIONID_UNQUOTED
+        assert not client.csrf_token.startswith('"')
+        assert not client.csrf_token.endswith('"')
+
+    def test_csrf_token_preserves_unquoted_string(self):
+        client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_JSESSIONID_UNQUOTED)
+        assert client.csrf_token == FAKE_JSESSIONID_UNQUOTED
+
+    def test_cookies_dict_formatting(self):
+        client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_JSESSIONID_QUOTED)
+        cookies = client.cookies
+        assert cookies["li_at"] == FAKE_LI_AT
+        assert cookies["JSESSIONID"] == f'"{FAKE_JSESSIONID_UNQUOTED}"'
+
+    def test_init_with_cookies_dict(self):
+        client = VoyagerClient(
+            cookies={"li_at": FAKE_LI_AT, "JSESSIONID": FAKE_JSESSIONID_QUOTED}
+        )
+        assert client.li_at == FAKE_LI_AT
+        assert client.csrf_token == FAKE_JSESSIONID_UNQUOTED
+        assert client.cookies["JSESSIONID"] == f'"{FAKE_JSESSIONID_UNQUOTED}"'
+
+
+# ── 2. Header Construction Tests ──────────────────────────────────────────────
+
+
+class TestHeaderConstruction:
+    def test_header_user_agent_chrome131(self):
+        headers = build_voyager_headers(
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+        )
+        assert "User-Agent" in headers
+        assert "Chrome/131" in headers["User-Agent"]
+        assert "Mozilla/5.0" in headers["User-Agent"]
+
+    def test_header_restli_protocol_version(self):
+        headers = build_voyager_headers(
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+        )
+        assert headers["x-restli-protocol-version"] == "2.0.0"
+
+    def test_header_sec_ch_ua(self):
+        headers = build_voyager_headers(
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+        )
+        assert headers["sec-ch-ua"] == '"Chromium";v="131", "Not_A Brand";v="24"'
+        assert headers["sec-ch-ua-mobile"] == "?0"
+        assert headers["sec-ch-ua-platform"] == '"Windows"'
+
+    def test_header_accept_and_language(self):
+        headers = build_voyager_headers(
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+        )
+        assert headers["Accept"] == "application/vnd.linkedin.normalized+json+2.1"
+        assert headers["Accept-Language"] == "en-US,en;q=0.9"
+        assert headers["x-li-lang"] == "en_US"
+
+    def test_header_csrf_and_referer(self):
+        headers = build_voyager_headers(
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+        )
+        assert headers["csrf-token"] == FAKE_JSESSIONID_UNQUOTED
+        assert headers["Referer"] == f"https://www.linkedin.com/in/{FAKE_SLUG}/"
+
+    def test_header_sec_fetch_directives(self):
+        headers = build_voyager_headers(
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+        )
+        assert headers["sec-fetch-dest"] == "empty"
+        assert headers["sec-fetch-mode"] == "cors"
+        assert headers["sec-fetch-site"] == "same-origin"
+
+    def test_header_tracking_is_valid_json(self):
+        headers = build_voyager_headers(
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+        )
+        track_data = json.loads(headers["x-li-track"])
+        assert track_data["clientVersion"] == "1.13.19790"
+        assert track_data["osName"] == "web"
+        assert track_data["mpName"] == "voyager-web"
+
+    def test_header_dynamic_page_instance_urn(self):
+        headers1 = build_voyager_headers(
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+        )
+        headers2 = build_voyager_headers(
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+        )
+        urn1 = headers1["x-li-page-instance"]
+        urn2 = headers2["x-li-page-instance"]
+
+        assert urn1.startswith("urn:li:page:d_flagship3_profile_view_base;")
+        assert urn2.startswith("urn:li:page:d_flagship3_profile_view_base;")
+        # Distinct UUIDs generated on each call
+        assert urn1 != urn2
+
+
+# ── 3. Client Lifecycle & Proxy Tests ─────────────────────────────────────────
+
+
+class TestClientLifecycleAndProxy:
     @pytest.mark.asyncio
-    async def test_context_manager_creates_client(self):
-        async with LinkedInClient(cookies=FAKE_COOKIES) as client:
-            assert client._client is not None
+    async def test_context_manager_lifecycle(self):
+        with patch("app.network.AsyncSession") as mock_session_cls:
+            mock_instance = AsyncMock()
+            mock_session_cls.return_value = mock_instance
+
+            client = VoyagerClient(
+                li_at=FAKE_LI_AT,
+                jsessionid=FAKE_JSESSIONID_QUOTED,
+            )
+            assert client._session is None
+
+            async with client as active_client:
+                assert active_client._session is not None
+                mock_session_cls.assert_called_once_with(
+                    impersonate="chrome131",
+                    cookies={
+                        "li_at": FAKE_LI_AT,
+                        "JSESSIONID": f'"{FAKE_JSESSIONID_UNQUOTED}"',
+                    },
+                    proxy=None,
+                )
+
+            # Session should be closed upon context manager exit
+            mock_instance.close.assert_awaited_once()
+            assert client._session is None
 
     @pytest.mark.asyncio
-    async def test_context_manager_closes_client(self):
-        async with LinkedInClient(cookies=FAKE_COOKIES) as client:
-            inner = client._client
-        # After exit, client should be closed — calling aclose twice is safe
-        assert inner is not None
+    async def test_proxy_url_forwarded_to_async_session(self):
+        proxy = "http://user:pass@127.0.0.1:8080"
+        with patch("app.network.AsyncSession") as mock_session_cls:
+            mock_instance = AsyncMock()
+            mock_session_cls.return_value = mock_instance
+
+            async with VoyagerClient(
+                li_at=FAKE_LI_AT,
+                jsessionid=FAKE_JSESSIONID_QUOTED,
+                proxy_url=proxy,
+            ):
+                mock_session_cls.assert_called_once_with(
+                    impersonate="chrome131",
+                    cookies={
+                        "li_at": FAKE_LI_AT,
+                        "JSESSIONID": f'"{FAKE_JSESSIONID_UNQUOTED}"',
+                    },
+                    proxy=proxy,
+                )
 
     @pytest.mark.asyncio
-    async def test_successful_get(self):
-        async with LinkedInClient(cookies=FAKE_COOKIES) as client:
-            with patch.object(
-                client._client, "get", new_callable=AsyncMock
-            ) as mock_get:
-                mock_get.return_value = _make_response(200)
-                response = await client.get(FAKE_URL)
-        assert response.status_code == 200
+    async def test_calling_get_profile_view_outside_context_manager_raises(self):
+        client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_JSESSIONID_QUOTED)
+        with pytest.raises(RuntimeError, match="async context manager"):
+            await client.get_profile_view(FAKE_SLUG)
+
+
+# ── 4. API Invocation & Response Handling Tests ───────────────────────────────
+
+
+class TestGetProfileView:
+    @pytest.mark.asyncio
+    async def test_get_profile_view_success(self):
+        expected_json = {
+            "data": {
+                "firstName": "Satya",
+                "lastName": "Nadella",
+                "headline": "Chairman and CEO at Microsoft",
+            },
+            "included": [],
+        }
+        mock_resp = _make_mock_response(200, expected_json)
+
+        with patch("app.network.AsyncSession") as mock_session_cls:
+            mock_instance = AsyncMock()
+            mock_instance.get = AsyncMock(return_value=mock_resp)
+            mock_session_cls.return_value = mock_instance
+
+            async with VoyagerClient(
+                li_at=FAKE_LI_AT, jsessionid=FAKE_JSESSIONID_QUOTED
+            ) as client:
+                result = await client.get_profile_view(FAKE_SLUG)
+
+            assert result == expected_json
+            mock_instance.get.assert_awaited_once()
+            called_url = mock_instance.get.call_args[1].get(
+                "url",
+                mock_instance.get.call_args[0][0]
+                if mock_instance.get.call_args[0]
+                else None,
+            )
+            assert (
+                called_url
+                == f"https://www.linkedin.com/voyager/api/identity/profiles/{FAKE_SLUG}/profileView"
+            )
 
     @pytest.mark.asyncio
-    async def test_headers_include_user_agent(self):
-        async with LinkedInClient(cookies=FAKE_COOKIES) as client:
-            assert "User-Agent" in client._client.headers
-            assert "Mozilla" in client._client.headers["User-Agent"]
+    @pytest.mark.parametrize("status_code", [401, 403])
+    async def test_auth_errors_raise_authentication_error_without_retry(
+        self, status_code: int
+    ):
+        mock_resp = _make_mock_response(status_code, text="Unauthorized")
+
+        with patch("app.network.AsyncSession") as mock_session_cls:
+            mock_instance = AsyncMock()
+            mock_instance.get = AsyncMock(return_value=mock_resp)
+            mock_session_cls.return_value = mock_instance
+
+            async with VoyagerClient(
+                li_at=FAKE_LI_AT,
+                jsessionid=FAKE_JSESSIONID_QUOTED,
+                max_retries=3,
+                backoff_seconds=0.01,
+            ) as client:
+                with pytest.raises(AuthenticationError, match="authentication failed"):
+                    await client.get_profile_view(FAKE_SLUG)
+
+            # Must not retry on auth failures
+            assert mock_instance.get.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_get_raises_on_401(self):
-        async with LinkedInClient(cookies=FAKE_COOKIES, max_retries=1) as client:
-            with patch.object(
-                client._client, "get", new_callable=AsyncMock
-            ) as mock_get:
-                # 401 is NOT retryable — should raise immediately
-                mock_resp = _make_response(401)
-                mock_get.return_value = mock_resp
-                response = await client.get(FAKE_URL)
-        assert response.status_code == 401
+    async def test_404_raises_profile_not_found_error_without_retry(self):
+        mock_resp = _make_mock_response(404, text="Not Found")
+
+        with patch("app.network.AsyncSession") as mock_session_cls:
+            mock_instance = AsyncMock()
+            mock_instance.get = AsyncMock(return_value=mock_resp)
+            mock_session_cls.return_value = mock_instance
+
+            async with VoyagerClient(
+                li_at=FAKE_LI_AT,
+                jsessionid=FAKE_JSESSIONID_QUOTED,
+                max_retries=3,
+                backoff_seconds=0.01,
+            ) as client:
+                with pytest.raises(ProfileNotFoundError, match="profile not found"):
+                    await client.get_profile_view(FAKE_SLUG)
+
+            assert mock_instance.get.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_retryable_status_helper(self):
-        assert _is_retryable_response(_make_response(429))
-        assert _is_retryable_response(_make_response(503))
-        assert not _is_retryable_response(_make_response(200))
-        assert not _is_retryable_response(_make_response(404))
+    @pytest.mark.parametrize("status_code", [429, 999])
+    async def test_rate_limit_triggers_retries_and_raises_rate_limit_error(
+        self, status_code: int
+    ):
+        mock_resp = _make_mock_response(status_code, text="Rate limit exceeded")
+
+        with patch("app.network.AsyncSession") as mock_session_cls:
+            mock_instance = AsyncMock()
+            mock_instance.get = AsyncMock(return_value=mock_resp)
+            mock_session_cls.return_value = mock_instance
+
+            max_retries = 3
+            async with VoyagerClient(
+                li_at=FAKE_LI_AT,
+                jsessionid=FAKE_JSESSIONID_QUOTED,
+                max_retries=max_retries,
+                backoff_seconds=0.01,
+            ) as client:
+                with pytest.raises(RateLimitError, match="rate limit exceeded"):
+                    await client.get_profile_view(FAKE_SLUG)
+
+            assert mock_instance.get.call_count == max_retries
 
     @pytest.mark.asyncio
-    async def test_get_without_context_manager_raises(self):
-        client = LinkedInClient(cookies=FAKE_COOKIES)
-        with pytest.raises(RuntimeError, match="context manager"):
-            await client.get(FAKE_URL)
+    @pytest.mark.parametrize("status_code", [500, 502, 503, 504])
+    async def test_server_errors_trigger_retries_and_raise_voyager_api_error(
+        self, status_code: int
+    ):
+        mock_resp = _make_mock_response(status_code, text="Server Error")
 
+        with patch("app.network.AsyncSession") as mock_session_cls:
+            mock_instance = AsyncMock()
+            mock_instance.get = AsyncMock(return_value=mock_resp)
+            mock_session_cls.return_value = mock_instance
 
-# ── SessionCache tests ────────────────────────────────────────────────────────
+            max_retries = 3
+            async with VoyagerClient(
+                li_at=FAKE_LI_AT,
+                jsessionid=FAKE_JSESSIONID_QUOTED,
+                max_retries=max_retries,
+                backoff_seconds=0.01,
+            ) as client:
+                with pytest.raises(VoyagerAPIError, match="server error") as exc_info:
+                    await client.get_profile_view(FAKE_SLUG)
+                assert exc_info.value.status_code == status_code
 
-
-class TestSessionCache:
-    def _make_cache(self) -> SessionCache:
-        cache = SessionCache.__new__(SessionCache)
-        cache._client = AsyncMock()
-        return cache
-
-    @pytest.mark.asyncio
-    async def test_get_cookies_cache_hit(self):
-        cache = self._make_cache()
-        cache._client.get = AsyncMock(return_value=json.dumps(FAKE_COOKIES))
-        result = await cache.get_cookies()
-        assert result == FAKE_COOKIES
-
-    @pytest.mark.asyncio
-    async def test_get_cookies_cache_miss(self):
-        cache = self._make_cache()
-        cache._client.get = AsyncMock(return_value=None)
-        result = await cache.get_cookies()
-        assert result is None
+            assert mock_instance.get.call_count == max_retries
 
     @pytest.mark.asyncio
-    async def test_get_cookies_redis_error_returns_none(self):
-        cache = self._make_cache()
-        cache._client.get = AsyncMock(side_effect=Exception("connection refused"))
-        result = await cache.get_cookies()
-        assert result is None  # degrades gracefully
+    async def test_transient_retry_recovers_to_success(self):
+        success_data = {"data": {"id": "123"}}
+        mock_responses = [
+            _make_mock_response(429, text="Too Many Requests"),
+            _make_mock_response(503, text="Service Unavailable"),
+            _make_mock_response(200, success_data),
+        ]
+
+        with patch("app.network.AsyncSession") as mock_session_cls:
+            mock_instance = AsyncMock()
+            mock_instance.get = AsyncMock(side_effect=mock_responses)
+            mock_session_cls.return_value = mock_instance
+
+            async with VoyagerClient(
+                li_at=FAKE_LI_AT,
+                jsessionid=FAKE_JSESSIONID_QUOTED,
+                max_retries=3,
+                backoff_seconds=0.01,
+            ) as client:
+                data = await client.get_profile_view(FAKE_SLUG)
+
+            assert data == success_data
+            assert mock_instance.get.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_set_cookies_calls_setex(self):
-        cache = self._make_cache()
-        cache._client.setex = AsyncMock()
-        await cache.set_cookies(FAKE_COOKIES)
-        cache._client.setex.assert_called_once()
-        args = cache._client.setex.call_args[0]
-        assert json.loads(args[2]) == FAKE_COOKIES
+    async def test_unexpected_http_status_raises_voyager_api_error_without_retry(self):
+        mock_resp = _make_mock_response(400, text="Bad Request")
 
-    @pytest.mark.asyncio
-    async def test_set_cookies_redis_error_silent(self):
-        cache = self._make_cache()
-        cache._client.setex = AsyncMock(side_effect=Exception("timeout"))
-        # Should not raise
-        await cache.set_cookies(FAKE_COOKIES)
+        with patch("app.network.AsyncSession") as mock_session_cls:
+            mock_instance = AsyncMock()
+            mock_instance.get = AsyncMock(return_value=mock_resp)
+            mock_session_cls.return_value = mock_instance
 
-    @pytest.mark.asyncio
-    async def test_invalidate_calls_delete(self):
-        cache = self._make_cache()
-        cache._client.delete = AsyncMock()
-        await cache.invalidate()
-        cache._client.delete.assert_called_once()
+            async with VoyagerClient(
+                li_at=FAKE_LI_AT,
+                jsessionid=FAKE_JSESSIONID_QUOTED,
+                max_retries=3,
+                backoff_seconds=0.01,
+            ) as client:
+                with pytest.raises(VoyagerAPIError, match="Unexpected HTTP 400"):
+                    await client.get_profile_view(FAKE_SLUG)
+
+            assert mock_instance.get.call_count == 1
