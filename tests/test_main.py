@@ -5,13 +5,10 @@ Comprehensive tests for FastAPI application in app/main.py.
 
 Test coverage:
   • /health endpoint (unauthenticated)
-  • POST /api/scrape with X-API-Key header
-  • POST /scrape route alias
-  • GET /api/scrape with ?url= query parameter
-  • GET /scrape route alias
-  • Authentication via 'Authorization: Bearer <key>'
-  • Authentication via '?api_key=<key>' parameter
-  • 401 on missing or invalid API key
+  • POST /api/scrape (open direct access)
+  • POST /scrape route alias (open direct access)
+  • GET /api/scrape with ?url= query parameter (open direct access)
+  • GET /scrape route alias (open direct access)
   • 404 on profile not found
   • 429 on rate limit
   • 502 on scraper upstream failure
@@ -34,7 +31,6 @@ from app.network import (
 from app.schemas import ProfileResponse
 from app.scraper import ScraperError
 
-VALID_KEY = "test-internal-api-key-12345"
 VALID_URL = "https://www.linkedin.com/in/satyanadella"
 
 FAKE_PROFILE = ProfileResponse(
@@ -48,7 +44,7 @@ FAKE_PROFILE = ProfileResponse(
 
 
 class FakeSettings:
-    internal_api_key = VALID_KEY
+    internal_api_key = ""
     li_at = "AQEDAT..." + "x" * 50
     jsessionid = '"ajax:1234567890123456789"'
     proxy_url = None
@@ -88,63 +84,18 @@ class TestHealthEndpoint:
         assert data["status"] == "ok"
         assert data["service"] == "tross"
 
-    @pytest.mark.asyncio
-    async def test_health_requires_no_auth(self, client):
-        response = await client.get("/health")
-        assert response.status_code != status.HTTP_401_UNAUTHORIZED
 
-
-# ── 2. Security & Multi-Source Auth Tests ─────────────────────────────────────
-
-
-class TestScrapeAuth:
-    @pytest.mark.asyncio
-    async def test_missing_auth_returns_401(self, client):
-        response = await client.post("/api/scrape", json={"url": VALID_URL})
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-    @pytest.mark.asyncio
-    async def test_invalid_api_key_returns_401(self, client):
-        response = await client.post(
-            "/api/scrape",
-            json={"url": VALID_URL},
-            headers={"X-API-Key": "wrong_key"},
-        )
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-    @pytest.mark.asyncio
-    async def test_auth_via_bearer_token(self, client):
-        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
-            mock_scrape.return_value = FAKE_PROFILE
-            response = await client.post(
-                "/api/scrape",
-                json={"url": VALID_URL},
-                headers={"Authorization": f"Bearer {VALID_KEY}"},
-            )
-        assert response.status_code == status.HTTP_200_OK
-
-    @pytest.mark.asyncio
-    async def test_auth_via_query_param(self, client):
-        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
-            mock_scrape.return_value = FAKE_PROFILE
-            response = await client.get(
-                f"/api/scrape?url={VALID_URL}&api_key={VALID_KEY}"
-            )
-        assert response.status_code == status.HTTP_200_OK
-
-
-# ── 3. Route Aliases & Methods (POST / GET) ───────────────────────────────────
+# ── 2. Open Direct Access & Route Aliases (POST / GET) ────────────────────────
 
 
 class TestRoutesAndMethods:
     @pytest.mark.asyncio
-    async def test_post_api_scrape_success(self, client):
+    async def test_post_api_scrape_open_access_no_key(self, client):
         with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
             mock_scrape.return_value = FAKE_PROFILE
             response = await client.post(
                 "/api/scrape",
                 json={"url": VALID_URL},
-                headers={"X-API-Key": VALID_KEY},
             )
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["full_name"] == "Satya Nadella"
@@ -156,18 +107,16 @@ class TestRoutesAndMethods:
             response = await client.post(
                 "/scrape",
                 json={"linkedin_url": VALID_URL},
-                headers={"X-API-Key": VALID_KEY},
             )
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["full_name"] == "Satya Nadella"
 
     @pytest.mark.asyncio
-    async def test_get_api_scrape_success(self, client):
+    async def test_get_api_scrape_open_access_no_key(self, client):
         with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
             mock_scrape.return_value = FAKE_PROFILE
             response = await client.get(
                 f"/api/scrape?url={VALID_URL}",
-                headers={"X-API-Key": VALID_KEY},
             )
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["full_name"] == "Satya Nadella"
@@ -178,13 +127,12 @@ class TestRoutesAndMethods:
             mock_scrape.return_value = FAKE_PROFILE
             response = await client.get(
                 f"/scrape?url={VALID_URL}",
-                headers={"X-API-Key": VALID_KEY},
             )
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["full_name"] == "Satya Nadella"
 
 
-# ── 4. Exception Handling Tests ───────────────────────────────────────────────
+# ── 3. Exception Handling Tests ───────────────────────────────────────────────
 
 
 class TestExceptionHandling:
@@ -195,7 +143,6 @@ class TestExceptionHandling:
             response = await client.post(
                 "/api/scrape",
                 json={"url": VALID_URL},
-                headers={"X-API-Key": VALID_KEY},
             )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert "LinkedIn session expired" in response.json()["detail"]
@@ -207,7 +154,6 @@ class TestExceptionHandling:
             response = await client.post(
                 "/api/scrape",
                 json={"url": VALID_URL},
-                headers={"X-API-Key": VALID_KEY},
             )
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert "Profile not found" in response.json()["detail"]
@@ -219,7 +165,6 @@ class TestExceptionHandling:
             response = await client.post(
                 "/api/scrape",
                 json={"url": VALID_URL},
-                headers={"X-API-Key": VALID_KEY},
             )
         assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
         assert "Rate limited" in response.json()["detail"]
@@ -231,7 +176,6 @@ class TestExceptionHandling:
             response = await client.post(
                 "/api/scrape",
                 json={"url": VALID_URL},
-                headers={"X-API-Key": VALID_KEY},
             )
         assert response.status_code == status.HTTP_502_BAD_GATEWAY
         assert "Upstream timeout" in response.json()["detail"]

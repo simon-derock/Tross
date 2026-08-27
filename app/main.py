@@ -5,17 +5,13 @@ FastAPI application — Production ASGI entry point for Tross.
 
 Endpoints:
   GET  /              — Redirects to /docs
-  GET  /docs         — Interactive Swagger UI (Nord Dark Theme)
+  GET  /docs         — Interactive Swagger UI (Open Public Access)
   GET  /redoc        — ReDoc 3-Column API Documentation
-  POST /api/scrape   — Scrape a LinkedIn profile (body JSON)
-  GET  /api/scrape   — Scrape a LinkedIn profile (query param ?url=...)
-  POST /scrape       — Alias route
-  GET  /scrape       — Alias route
+  POST /api/scrape   — Scrape a LinkedIn profile (body JSON, open access)
+  GET  /api/scrape   — Scrape a LinkedIn profile (query param ?url=..., open access)
+  POST /scrape       — Alias route (open access)
+  GET  /scrape       — Alias route (open access)
   GET  /health       — Health check (open)
-
-Authentication:
-  Supports 'X-API-Key' header, 'Authorization: Bearer <key>' header,
-  or '?api_key=<key>' query parameter.
 """
 
 from __future__ import annotations
@@ -23,19 +19,15 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import (
-    Depends,
     FastAPI,
     Header,
-    HTTPException,
     Query,
     Request,
-    Security,
     status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
-from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
-from app.config import get_settings
+from app.config import get_settings  # noqa: F401
 from app.logging_config import configure_logging, get_logger, new_trace_id
 from app.network import (
     AuthenticationError,
@@ -63,7 +55,8 @@ app = FastAPI(
     title="Tross: LinkedIn Profile API",
     description=(
         "Reverse-engineered, production-ready REST API for extracting structured LinkedIn "
-        "profile information using high-fidelity Voyager client TLS impersonation."
+        "profile information using high-fidelity Voyager client TLS impersonation.\n\n"
+        "**Open for Direct Testing**: Simply enter any LinkedIn profile URL and click Execute."
     ),
     version="0.1.0",
     lifespan=lifespan,
@@ -73,42 +66,6 @@ app = FastAPI(
 )
 
 logger = get_logger(__name__)
-
-# ── Security & Authentication ─────────────────────────────────────────────────
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-bearer_scheme = HTTPBearer(auto_error=False)
-
-
-async def verify_api_key(
-    x_api_key: str | None = Security(api_key_header),  # noqa: B008
-    auth_header: HTTPAuthorizationCredentials | None = Security(bearer_scheme),  # noqa: B008
-    api_key_query: str | None = Query(None, alias="api_key"),  # noqa: B008
-) -> None:
-    """
-    Validate inbound API key from multiple sources:
-      1. 'X-API-Key' request header
-      2. 'Authorization: Bearer <key>' request header
-      3. '?api_key=<key>' query parameter
-    """
-    settings = get_settings()
-
-    provided_key: str | None = None
-    if x_api_key:
-        provided_key = x_api_key.strip()
-    elif auth_header and auth_header.credentials:
-        provided_key = auth_header.credentials.strip()
-    elif api_key_query:
-        provided_key = api_key_query.strip()
-
-    if not provided_key or provided_key != settings.internal_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=(
-                "Invalid or missing API key. Provide via 'X-API-Key' header, "
-                "Bearer token, or '?api_key=' parameter."
-            ),
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
 
 # ── Global Exception Handlers ─────────────────────────────────────────────────
@@ -177,7 +134,7 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "service": "tross"}
 
 
-# ── Scraper Endpoints ─────────────────────────────────────────────────────────
+# ── Scraper Endpoints (Open Public Access) ────────────────────────────────────
 
 
 @app.post(
@@ -185,15 +142,10 @@ async def health() -> dict[str, str]:
     response_model=ProfileResponse,
     tags=["scraper"],
     summary="Scrape a LinkedIn profile (POST)",
-    dependencies=[Depends(verify_api_key)],
     responses={
         200: {
             "description": "Profile scraped successfully",
             "model": ProfileResponse,
-        },
-        401: {
-            "model": ErrorResponse,
-            "description": "Bad API key or invalid backend LinkedIn credentials",
         },
         404: {
             "model": ErrorResponse,
@@ -214,7 +166,6 @@ async def health() -> dict[str, str]:
     "/scrape",
     response_model=ProfileResponse,
     tags=["scraper"],
-    dependencies=[Depends(verify_api_key)],
     include_in_schema=False,
 )
 async def scrape_post(
@@ -223,7 +174,7 @@ async def scrape_post(
     x_jsessionid: str | None = Header(default=None, alias="X-JSESSIONID"),
 ) -> ProfileResponse:
     """
-    Scrape a LinkedIn profile URL via POST request.
+    Scrape a LinkedIn profile URL via POST request. Direct open access for recruiters and evaluators.
 
     **Input format:**
     ```json
@@ -260,13 +211,11 @@ async def scrape_post(
     response_model=ProfileResponse,
     tags=["scraper"],
     summary="Scrape a LinkedIn profile (GET)",
-    dependencies=[Depends(verify_api_key)],
     responses={
         200: {
             "description": "Profile scraped successfully",
             "model": ProfileResponse,
         },
-        401: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         422: {"description": "Validation error"},
         429: {"model": ErrorResponse},
@@ -277,7 +226,6 @@ async def scrape_post(
     "/scrape",
     response_model=ProfileResponse,
     tags=["scraper"],
-    dependencies=[Depends(verify_api_key)],
     include_in_schema=False,
 )
 async def scrape_get(
@@ -291,7 +239,7 @@ async def scrape_get(
     x_jsessionid: str | None = Header(default=None, alias="X-JSESSIONID"),
 ) -> ProfileResponse:
     """
-    Scrape a LinkedIn profile URL via GET query parameter.
+    Scrape a LinkedIn profile URL via GET query parameter. Direct open access for recruiters and evaluators.
 
     **Example:** `/api/scrape?url=https://www.linkedin.com/in/satyanadella/`
     """

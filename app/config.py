@@ -2,8 +2,8 @@
 app/config.py
 ─────────────
 Strict environment validation using pydantic-settings.
-Application boot will FAIL FAST if any required secret is missing or malformed,
-preventing silent runtime crashes on Vercel.
+Application boot validates backend credentials if provided,
+with safe defaults for open public API access.
 """
 
 from functools import lru_cache
@@ -23,15 +23,20 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── LinkedIn Session Cookies (required) ───────────────────────────────────
-    li_at: str = Field(..., min_length=10, description="LinkedIn li_at session cookie")
+    # ── LinkedIn Session Cookies (optional backend secrets) ───────────────────
+    li_at: str = Field(
+        default="",
+        description="LinkedIn li_at session cookie",
+    )
     jsessionid: str = Field(
-        ..., min_length=10, description="LinkedIn JSESSIONID cookie"
+        default="",
+        description="LinkedIn JSESSIONID cookie",
     )
 
-    # ── Internal API Security (required) ──────────────────────────────────────
+    # ── Internal API Security (optional) ──────────────────────────────────────
     internal_api_key: str = Field(
-        ..., min_length=16, description="Internal bearer token for /api/scrape"
+        default="",
+        description="Optional internal API key",
     )
 
     # ── Proxy Rotation (optional) ─────────────────────────────────────────────
@@ -56,6 +61,5 @@ def get_settings() -> Settings:
     """
     Return the validated Settings singleton.
     Cached so .env is parsed exactly once per process.
-    Raises ValidationError on startup if any required var is missing.
     """
     return Settings()
