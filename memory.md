@@ -16,23 +16,23 @@
   - Implemented `VoyagerClient` in `app/network.py` using `curl_cffi.requests.AsyncSession(impersonate="chrome131")`.
   - Built dynamic `csrf-token` generator (`JSESSIONID.strip('"')`), authentic Chrome 131 headers, and `tenacity` exponential backoff retries.
   - Passed 27 network unit tests; merged to `main` and pushed.
+- [x] Phase 5 Upgrade (`feature/voyager-parser`):
+  - Created realistic Voyager `profileView` JSON fixtures in `tests/fixtures/voyager_payloads.py`.
+  - Implemented `parse_voyager_profile` in `app/parser.py` (pure JSON extraction for Name, Headline, Location, About, highest-res Profile Image, Experience, Education, Skills, Certifications, Languages).
+  - Passed 18 parser unit tests; merged to `main` and pushed.
 
 ## PRESENT
-- **Current Branch:** `main` (commit: `e4e7f81`)
-- **Active Workstream:** Phase 5 Upgrade (`feature/voyager-parser` in `/home/simon/wt-parser`)
+- **Current Branch:** `main` (commit: `7cd2f0c`)
+- **Active Workstream:** Phase 6 Upgrade (`feature/api-orchestrator` in `/home/simon/wt-api`)
 - **Active Error/Exception:** None. All quality gates passing (`ruff`, `pytest`).
 
 ## NEXT (Queue)
-1. **Phase 5 Upgrade (`wt-parser` / `feature/voyager-parser`):**
-   - Write realistic Voyager `profileView` JSON fixtures in `tests/fixtures/voyager_payloads.py`.
-   - Implement `parse_voyager_profile` in `app/parser.py` (pure JSON extraction for Name, Headline, Location, About, highest-res Profile Image, Experience, Education, Skills, Certifications, Languages).
-   - Test, verify, micro-commit, push, and merge into `main`.
-2. **Phase 6 Upgrade (`wt-api` / `feature/api-orchestrator`):**
+1. **Phase 6 Upgrade (`wt-api` / `feature/api-orchestrator`):**
    - Update `app/scraper.py` orchestrator to run `VoyagerClient` -> `parse_voyager_profile`.
    - Update `app/main.py` with `/api/scrape` and `/health`.
    - Update integration tests in `tests/test_scraper.py` and `tests/test_main.py`.
    - Test, verify, micro-commit, push, and merge into `main`.
-3. **Master Verification & Documentation:**
+2. **Master Verification & Documentation:**
    - Compile `requirements.txt` via `uv pip compile`.
    - Update `README.md` with complete architecture, approach, API docs, and known limitations.
    - Run complete test suite and push final state to `origin/main`.
@@ -42,7 +42,7 @@
 ## Provider Handover Protocol
 
 ```xml
-<provider_handover_protocol version="2.1">
+<provider_handover_protocol version="2.2">
   <metadata>
     <project_name>Tross</project_name>
     <repository_url>https://github.com/simon-derock/Tross.git</repository_url>
@@ -62,12 +62,16 @@
       <header_authenticity>Chrome 131 headers with dynamic 'x-li-page-instance', 'x-li-track', 'x-restli-protocol-version: 2.0.0', and context-aware 'Referer'.</header_authenticity>
       <retry_resilience>Tenacity exponential backoff covering HTTP 429, 500, 502, 503, 504, and HTTP 999.</retry_resilience>
     </anti_detection_stack>
+    <completed_layers>
+      <layer name="config">pydantic-settings in app/config.py (13 tests passing)</layer>
+      <layer name="network">curl_cffi Chrome 131 VoyagerClient in app/network.py (27 tests passing)</layer>
+      <layer name="parser">pure JSON parser &amp; PhantomBuster mapper in app/parser.py (18 tests passing)</layer>
+    </completed_layers>
   </system_architecture>
 
   <status_and_locations>
     <active_branch>main</active_branch>
     <worktrees>
-      <worktree path="/home/simon/wt-parser" branch="feature/voyager-parser" purpose="Pure JSON Voyager parser implementation and fixtures" />
       <worktree path="/home/simon/wt-api" branch="feature/api-orchestrator" purpose="Scraper orchestrator and FastAPI endpoint integration" />
     </worktrees>
   </status_and_locations>
