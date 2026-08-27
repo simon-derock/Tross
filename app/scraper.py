@@ -1,10 +1,11 @@
 """
 app/scraper.py
 ──────────────
-High-level LinkedIn Scraping Orchestrator with 4-Tier Anti-Fragile Failover:
+Pure LinkedIn Voyager REST API Scraping Orchestrator:
   1. In-Memory LRU Cache (24-hour TTL) for sub-millisecond repeated lookups.
-  2. Authenticated Voyager API client with custom or configured session cookies.
-  3. Automatic Failover to Anonymous Public Guest scraper on 401/403/Challenge.
+  2. Pure direct HTTP calls to LinkedIn internal Voyager REST API endpoints:
+     GET https://www.linkedin.com/voyager/api/identity/profiles/{slug}/profileView
+  3. Pure JSON extraction via parse_voyager_profile (zero HTML parsing, zero browser).
   4. Trace ID tagging and cache propagation.
 """
 
@@ -24,7 +25,6 @@ from app.network import (
     VoyagerClient,
 )
 from app.parser import parse_voyager_profile
-from app.public_scraper import scrape_public_profile
 from app.schemas import ProfileResponse
 
 logger = get_logger(__name__)
@@ -131,8 +131,8 @@ async def scrape_profile(
     override_cookies: dict[str, str] | None = None,
 ) -> ProfileResponse:
     """
-    Scrape a LinkedIn profile URL using reverse-engineered Voyager API endpoints
-    with automatic failover to anonymous public scraper and in-memory LRU cache.
+    Scrape a LinkedIn profile URL using pure reverse-engineered Voyager REST API endpoints.
+    Directly queries LinkedIn internal API with curl_cffi Chrome 131 TLS impersonation.
     """
     trace_id = new_trace_id()
     settings = get_settings()
@@ -144,7 +144,7 @@ async def scrape_profile(
         else f"https://www.linkedin.com/in/{vanity_slug}"
     )
 
-    # ── a. Check In-Memory LRU Cache ──────────────────────────────────────────
+    # ── 1. Check In-Memory LRU Cache ──────────────────────────────────────────
     cached_profile = get_cached_profile(vanity_slug)
     if cached_profile is not None:
         logger.info(
@@ -157,13 +157,13 @@ async def scrape_profile(
         return response_copy
 
     logger.info(
-        "scraper.start",
+        "scraper.voyager_start",
         url=canonical_url,
         vanity_slug=vanity_slug,
         trace_id=trace_id,
     )
 
-    # ── b. Resolve Credentials ────────────────────────────────────────────────
+    # ── 2. Resolve Credentials ────────────────────────────────────────────────
     li_at: str | None = None
     jsessionid: str | None = None
 
@@ -183,89 +183,37 @@ async def scrape_profile(
         li_at = settings.li_at
         jsessionid = settings.jsessionid
 
-    profile: ProfileResponse | None = None
-
-    # ── c. Authenticated Voyager Scraping or Failover ──────────────────────────
-    if li_at:
-        try:
-            async with VoyagerClient(
-                li_at=li_at,
-                jsessionid=jsessionid,
-                proxy_url=settings.proxy_url,
-                max_retries=settings.max_retries,
-                backoff_seconds=settings.retry_backoff_seconds,
-            ) as client:
-                raw_data = await client.get_profile_view(vanity_slug)
-
-            profile = parse_voyager_profile(
-                data=raw_data,
-                linkedin_url=canonical_url,
-                vanity_slug=vanity_slug,
-            )
-
-        except AuthenticationError as exc:
-            logger.warning(
-                "scraper.auth_failed_fallback_to_public",
-                error=str(exc),
-                vanity_slug=vanity_slug,
-                trace_id=trace_id,
-            )
-            profile = await scrape_public_profile(
-                vanity_slug=vanity_slug,
-                proxy_url=settings.proxy_url,
-            )
-
-        except VoyagerAPIError as exc:
-            err_msg = str(exc).lower()
-            if (
-                exc.status_code in (401, 403)
-                or "auth" in err_msg
-                or "challenge" in err_msg
-                or "checkpoint" in err_msg
-            ):
-                logger.warning(
-                    "scraper.voyager_challenge_fallback_to_public",
-                    error=str(exc),
-                    vanity_slug=vanity_slug,
-                    trace_id=trace_id,
-                )
-                profile = await scrape_public_profile(
-                    vanity_slug=vanity_slug,
-                    proxy_url=settings.proxy_url,
-                )
-            else:
-                logger.error(
-                    "scraper.voyager_error", error=str(exc), vanity_slug=vanity_slug
-                )
-                raise ScraperError(f"LinkedIn Voyager API error: {exc}") from exc
-
-        except (ProfileNotFoundError, RateLimitError):
-            raise
-
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "scraper.voyager_failed_fallback_to_public",
-                error=str(exc),
-                vanity_slug=vanity_slug,
-                trace_id=trace_id,
-            )
-            profile = await scrape_public_profile(
-                vanity_slug=vanity_slug,
-                proxy_url=settings.proxy_url,
-            )
-    else:
-        # No credentials configured — directly use anonymous public guest scraper
-        logger.info(
-            "scraper.no_credentials_using_public",
-            vanity_slug=vanity_slug,
-            trace_id=trace_id,
-        )
-        profile = await scrape_public_profile(
-            vanity_slug=vanity_slug,
+    # ── 3. Direct Voyager REST API Call ───────────────────────────────────────
+    try:
+        async with VoyagerClient(
+            li_at=li_at,
+            jsessionid=jsessionid,
             proxy_url=settings.proxy_url,
+            max_retries=settings.max_retries,
+            backoff_seconds=settings.retry_backoff_seconds,
+        ) as client:
+            raw_data = await client.get_profile_view(vanity_slug)
+
+        profile = parse_voyager_profile(
+            data=raw_data,
+            linkedin_url=canonical_url,
+            vanity_slug=vanity_slug,
         )
 
-    # ── d. Cache & Attach Trace ID ────────────────────────────────────────────
+    except (AuthenticationError, ProfileNotFoundError, RateLimitError):
+        raise
+
+    except VoyagerAPIError as exc:
+        logger.error("scraper.voyager_error", error=str(exc), vanity_slug=vanity_slug)
+        raise ScraperError(f"LinkedIn Voyager API error: {exc}") from exc
+
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "scraper.unexpected_error", error=str(exc), vanity_slug=vanity_slug
+        )
+        raise ScraperError(f"Unexpected scraping error: {exc}") from exc
+
+    # ── 4. Cache & Attach Trace ID ────────────────────────────────────────────
     profile.trace_id = trace_id
     set_cached_profile(vanity_slug, profile)
 
