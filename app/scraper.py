@@ -4,10 +4,10 @@ app/scraper.py
 High-level LinkedIn Scraping Orchestrator.
 
 Flow:
-  1. Extract vanity slug from LinkedIn profile URL (e.g. 'satyanadella').
+  1. Extract vanity slug from any LinkedIn profile URL or identifier.
   2. Instantiate VoyagerClient using session credentials (LI_AT / JSESSIONID) from Settings.
   3. Fetch raw Voyager profileView JSON via curl_cffi Chrome 131 session.
-  4. Parse and normalize JSON into PhantomBuster-compliant ProfileResponse model.
+  4. Parse and normalize JSON into structured ProfileResponse model.
   5. Attach per-request trace_id and return.
 """
 
@@ -35,33 +35,65 @@ class ScraperError(Exception):
     """Base exception for scraping orchestration errors."""
 
 
-def extract_vanity_slug(linkedin_url: str) -> str:
+def extract_vanity_slug(raw_input: str) -> str:
     """
-    Extract the vanity identifier / username from a LinkedIn profile URL.
+    Extract the vanity identifier / username from a LinkedIn profile URL or raw string.
 
-    Examples:
+    Supported formats:
       • https://www.linkedin.com/in/satyanadella/ -> satyanadella
       • https://linkedin.com/in/john-doe-123?miniProfileUrn=... -> john-doe-123
-      • https://www.linkedin.com/in/jane-doe#experience -> jane-doe
+      • http://www.linkedin.com/in/jane-doe#experience -> jane-doe
+      • linkedin.com/in/williamhgates -> williamhgates
+      • in/satyanadella -> satyanadella
+      • satyanadella -> satyanadella
 
     Raises:
-      ValueError: If the URL does not contain a valid /in/ vanity slug.
+      ValueError: If the string is completely empty or cannot be parsed.
     """
-    clean_url = linkedin_url.strip()
-    parsed = urlparse(clean_url)
-    path = parsed.path.rstrip("/")
+    clean = raw_input.strip()
+    if not clean:
+        raise ValueError("Profile input cannot be empty.")
 
-    match = re.search(r"/in/([^/?#]+)", path)
-    if not match:
+    # Remove trailing fragments or query parameters
+    clean = clean.split("#")[0].split("?")[0].rstrip("/")
+
+    # Pattern 1: Contains /in/<slug>
+    match = re.search(r"/in/([^/?#]+)", clean)
+    if match:
+        slug = match.group(1).strip()
+        if slug:
+            return slug
+
+    # Pattern 2: Starts with in/<slug>
+    if clean.startswith("in/"):
+        slug = clean[3:].strip()
+        if slug:
+            return slug
+
+    # Pattern 3: Full URL without /in/ (e.g. invalid company or school URL passed)
+    if (
+        clean.startswith("http://")
+        or clean.startswith("https://")
+        or "linkedin.com" in clean
+    ):
+        parsed = urlparse(clean if "://" in clean else f"https://{clean}")
+        path_parts = [p for p in parsed.path.split("/") if p]
+        if "in" in path_parts:
+            idx = path_parts.index("in")
+            if idx + 1 < len(path_parts):
+                return path_parts[idx + 1]
         raise ValueError(
-            f"Invalid LinkedIn profile URL '{linkedin_url}'. Expected path format '/in/<username>'."
+            f"Invalid LinkedIn profile URL '{raw_input}'. Expected format 'https://www.linkedin.com/in/<username>'."
         )
 
-    slug = match.group(1).strip()
-    if not slug:
-        raise ValueError(f"Empty member vanity slug extracted from '{linkedin_url}'.")
+    # Pattern 4: Raw vanity slug (e.g. 'satyanadella')
+    slug = clean.strip()
+    if re.match(r"^[a-zA-Z0-9_\-%]+$", slug):
+        return slug
 
-    return slug
+    raise ValueError(
+        f"Unable to extract LinkedIn vanity slug from input '{raw_input}'."
+    )
 
 
 async def scrape_profile(linkedin_url: str) -> ProfileResponse:
@@ -69,7 +101,7 @@ async def scrape_profile(linkedin_url: str) -> ProfileResponse:
     Scrape a LinkedIn profile URL using reverse-engineered Voyager API endpoints.
 
     Args:
-        linkedin_url: Validated LinkedIn profile URL.
+        linkedin_url: Validated LinkedIn profile URL or vanity slug.
 
     Returns:
         ProfileResponse populated with all extracted profile fields.
@@ -84,9 +116,15 @@ async def scrape_profile(linkedin_url: str) -> ProfileResponse:
     settings = get_settings()
 
     vanity_slug = extract_vanity_slug(linkedin_url)
+    canonical_url = (
+        linkedin_url
+        if linkedin_url.startswith("http")
+        else f"https://www.linkedin.com/in/{vanity_slug}"
+    )
+
     logger.info(
         "scraper.start",
-        url=linkedin_url,
+        url=canonical_url,
         vanity_slug=vanity_slug,
         trace_id=trace_id,
     )
@@ -103,7 +141,7 @@ async def scrape_profile(linkedin_url: str) -> ProfileResponse:
 
         profile = parse_voyager_profile(
             data=raw_data,
-            linkedin_url=linkedin_url,
+            linkedin_url=canonical_url,
             vanity_slug=vanity_slug,
         )
         profile.trace_id = trace_id

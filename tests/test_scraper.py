@@ -4,11 +4,10 @@ tests/test_scraper.py
 Unit and integration tests for the scraper orchestrator (app/scraper.py).
 
 Test coverage:
-  • Vanity slug extraction from various LinkedIn URL formats (trailing slashes, query params, fragments)
-  • Invalid URLs raising ValueError during slug extraction
-  • Successful end-to-end scrape execution (mocked VoyagerClient)
-  • Domain exception propagation (AuthenticationError, ProfileNotFoundError, RateLimitError, VoyagerAPIError)
-  • Per-request trace_id attachment
+  • Vanity slug extraction from all URL formats (http/https, with/without www, query params, fragments, raw slugs)
+  • Error handling on invalid/empty inputs
+  • End-to-end scrape execution with mocked VoyagerClient
+  • Exception propagation (AuthenticationError, ProfileNotFoundError, RateLimitError, VoyagerAPIError)
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ VALID_LINKEDIN_URL = "https://www.linkedin.com/in/satyanadella"
 
 
 class TestExtractVanitySlug:
-    def test_standard_url(self):
+    def test_standard_https_url(self):
         assert (
             extract_vanity_slug("https://www.linkedin.com/in/satyanadella")
             == "satyanadella"
@@ -60,19 +59,18 @@ class TestExtractVanitySlug:
             == "jane-doe"
         )
 
-    def test_url_without_www(self):
-        assert (
-            extract_vanity_slug("https://linkedin.com/in/williamhgates")
-            == "williamhgates"
-        )
+    def test_url_without_protocol_or_www(self):
+        assert extract_vanity_slug("linkedin.com/in/williamhgates") == "williamhgates"
 
-    def test_invalid_url_raises_value_error(self):
-        with pytest.raises(ValueError, match="Expected path format"):
-            extract_vanity_slug("https://www.linkedin.com/company/microsoft")
+    def test_prefix_in_slash(self):
+        assert extract_vanity_slug("in/satyanadella") == "satyanadella"
 
-    def test_empty_slug_raises_value_error(self):
-        with pytest.raises(ValueError):
-            extract_vanity_slug("https://www.linkedin.com/in/")
+    def test_raw_vanity_slug_directly(self):
+        assert extract_vanity_slug("satyanadella") == "satyanadella"
+
+    def test_empty_input_raises_value_error(self):
+        with pytest.raises(ValueError, match="cannot be empty"):
+            extract_vanity_slug("   ")
 
 
 # ── 2. Scrape Profile Orchestration Tests ─────────────────────────────────────

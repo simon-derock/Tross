@@ -4,20 +4,33 @@ app/main.py
 FastAPI application — Production ASGI entry point for Tross.
 
 Endpoints:
-  POST /api/scrape   — Scrape a LinkedIn profile (X-API-Key protected)
+  POST /api/scrape   — Scrape a LinkedIn profile (body JSON)
+  GET  /api/scrape   — Scrape a LinkedIn profile (query param ?url=...)
+  POST /scrape       — Alias route
+  GET  /scrape       — Alias route
   GET  /health       — Health check (open)
   GET  /docs         — OpenAPI documentation
 
-Security:
-  Inbound POST /api/scrape requires header 'X-API-Key' matching INTERNAL_API_KEY.
+Authentication:
+  Supports 'X-API-Key' header, 'Authorization: Bearer <key>' header,
+  or '?api_key=<key>' query parameter.
 """
 
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    Security,
+    status,
+)
 from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
 from app.logging_config import configure_logging, get_logger, new_trace_id
@@ -45,7 +58,7 @@ app = FastAPI(
     title="Tross — LinkedIn Scraper API",
     description=(
         "Production-ready, reverse-engineered LinkedIn profile scraper API. "
-        "Accepts a LinkedIn profile URL and returns structured JSON conforming to PhantomBuster schema."
+        "Accepts a LinkedIn profile URL and returns structured profile JSON."
     ),
     version="1.0.0",
     docs_url="/docs",
@@ -55,17 +68,38 @@ app = FastAPI(
 
 logger = get_logger(__name__)
 
+# ── Security Schemes ──────────────────────────────────────────────────────────
 
-# ── Auth Dependency ───────────────────────────────────────────────────────────
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> None:
-    """Validate inbound X-API-Key header against INTERNAL_API_KEY env var."""
+async def verify_api_key(
+    x_api_key: str | None = Security(api_key_header),  # noqa: B008
+    auth_header: HTTPAuthorizationCredentials | None = Security(bearer_scheme),  # noqa: B008
+    api_key_query: str | None = Query(None, alias="api_key"),  # noqa: B008
+) -> None:
+    """
+    Validate inbound API key from multiple sources:
+      1. 'X-API-Key' header
+      2. 'Authorization: Bearer <key>' header
+      3. '?api_key=<key>' query parameter
+    """
     settings = get_settings()
-    if x_api_key != settings.internal_api_key:
+    expected_key = settings.internal_api_key
+
+    token: str | None = None
+    if x_api_key:
+        token = x_api_key.strip()
+    elif auth_header and hasattr(auth_header, "credentials"):
+        token = auth_header.credentials.strip()
+    elif api_key_query:
+        token = api_key_query.strip()
+
+    if not token or token != expected_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing X-API-Key header.",
+            detail="Invalid or missing API key. Provide via 'X-API-Key' header, Bearer token, or '?api_key=' parameter.",
         )
 
 
@@ -137,7 +171,7 @@ async def health() -> dict[str, str]:
     "/api/scrape",
     response_model=ProfileResponse,
     tags=["scraper"],
-    summary="Scrape a LinkedIn profile",
+    summary="Scrape a LinkedIn profile (POST)",
     dependencies=[Depends(verify_api_key)],
     responses={
         200: {
@@ -152,7 +186,7 @@ async def health() -> dict[str, str]:
             "model": ErrorResponse,
             "description": "LinkedIn profile does not exist",
         },
-        422: {"description": "Validation error (e.g. invalid LinkedIn URL)"},
+        422: {"description": "Validation error"},
         429: {
             "model": ErrorResponse,
             "description": "LinkedIn rate limit exceeded",
@@ -163,22 +197,85 @@ async def health() -> dict[str, str]:
         },
     },
 )
-async def scrape(body: ScrapeRequest) -> ProfileResponse:
+@app.post(
+    "/scrape",
+    response_model=ProfileResponse,
+    tags=["scraper"],
+    dependencies=[Depends(verify_api_key)],
+    include_in_schema=False,
+)
+async def scrape_post(body: ScrapeRequest) -> ProfileResponse:
     """
-    Scrape a LinkedIn profile URL and return structured JSON data.
+    Scrape a LinkedIn profile URL via POST request.
 
-    **Requirements:**
-      - Header `X-API-Key: <INTERNAL_API_KEY>`
-      - Body `{"linkedin_url": "https://www.linkedin.com/in/<vanity_slug>/"}`
+    **Input format:**
+    ```json
+    {
+      "url": "https://www.linkedin.com/in/satyanadella/"
+    }
+    ```
     """
     trace_id = new_trace_id()
-    logger.info("api.scrape.request", url=body.linkedin_url, trace_id=trace_id)
+    logger.info("api.scrape.post", url=body.linkedin_url, trace_id=trace_id)
 
     profile = await scrape_profile(body.linkedin_url)
     profile.trace_id = trace_id
 
     logger.info(
-        "api.scrape.response",
+        "api.scrape.success",
+        name=profile.full_name,
+        profile_id=profile.profile_id,
+        trace_id=trace_id,
+    )
+    return profile
+
+
+@app.get(
+    "/api/scrape",
+    response_model=ProfileResponse,
+    tags=["scraper"],
+    summary="Scrape a LinkedIn profile (GET)",
+    dependencies=[Depends(verify_api_key)],
+    responses={
+        200: {
+            "description": "Profile scraped successfully",
+            "model": ProfileResponse,
+        },
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        422: {"description": "Validation error"},
+        429: {"model": ErrorResponse},
+        502: {"model": ErrorResponse},
+    },
+)
+@app.get(
+    "/scrape",
+    response_model=ProfileResponse,
+    tags=["scraper"],
+    dependencies=[Depends(verify_api_key)],
+    include_in_schema=False,
+)
+async def scrape_get(
+    url: str = Query(
+        ...,
+        alias="url",
+        description="LinkedIn profile URL or member vanity slug",
+        examples=["https://www.linkedin.com/in/satyanadella/"],
+    ),
+) -> ProfileResponse:
+    """
+    Scrape a LinkedIn profile URL via GET query parameter.
+
+    **Example:** `/api/scrape?url=https://www.linkedin.com/in/satyanadella/`
+    """
+    trace_id = new_trace_id()
+    logger.info("api.scrape.get", url=url, trace_id=trace_id)
+
+    profile = await scrape_profile(url)
+    profile.trace_id = trace_id
+
+    logger.info(
+        "api.scrape.success",
         name=profile.full_name,
         profile_id=profile.profile_id,
         trace_id=trace_id,

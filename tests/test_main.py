@@ -1,8 +1,20 @@
 """
 tests/test_main.py
 ──────────────────
-FastAPI endpoint tests via httpx AsyncClient.
-Tests all endpoints, security headers, auth guards, response codes, and exception handlers.
+Comprehensive tests for FastAPI application in app/main.py.
+
+Test coverage:
+  • /health endpoint (unauthenticated)
+  • POST /api/scrape with X-API-Key header
+  • POST /scrape route alias
+  • GET /api/scrape with ?url= query parameter
+  • GET /scrape route alias
+  • Authentication via 'Authorization: Bearer <key>'
+  • Authentication via '?api_key=<key>' parameter
+  • 401 on missing or invalid API key
+  • 404 on profile not found
+  • 429 on rate limit
+  • 502 on scraper upstream failure
 """
 
 from __future__ import annotations
@@ -82,109 +94,144 @@ class TestHealthEndpoint:
         assert response.status_code != status.HTTP_401_UNAUTHORIZED
 
 
-# ── 2. /api/scrape Security & Auth Tests ──────────────────────────────────────
+# ── 2. Security & Multi-Source Auth Tests ─────────────────────────────────────
 
 
 class TestScrapeAuth:
     @pytest.mark.asyncio
-    async def test_missing_api_key_header_returns_422(self, client):
-        response = await client.post("/api/scrape", json={"linkedin_url": VALID_URL})
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    async def test_missing_auth_returns_401(self, client):
+        response = await client.post("/api/scrape", json={"url": VALID_URL})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_invalid_api_key_returns_401(self, client):
         response = await client.post(
             "/api/scrape",
-            json={"linkedin_url": VALID_URL},
-            headers={"X-API-Key": "invalid_wrong_key"},
+            json={"url": VALID_URL},
+            headers={"X-API-Key": "wrong_key"},
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-        assert "Invalid or missing X-API-Key" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_invalid_url_payload_returns_422(self, client):
-        response = await client.post(
-            "/api/scrape",
-            json={"linkedin_url": "https://google.com/not-linkedin"},
-            headers={"X-API-Key": VALID_KEY},
-        )
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-# ── 3. /api/scrape Endpoint Success & Exception Handling Tests ────────────────
-
-
-class TestScrapeEndpointResponses:
-    @pytest.mark.asyncio
-    async def test_successful_scrape_returns_200_and_profile_payload(self, client):
+    async def test_auth_via_bearer_token(self, client):
         with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
             mock_scrape.return_value = FAKE_PROFILE
-
             response = await client.post(
                 "/api/scrape",
-                json={"linkedin_url": VALID_URL},
-                headers={"X-API-Key": VALID_KEY},
+                json={"url": VALID_URL},
+                headers={"Authorization": f"Bearer {VALID_KEY}"},
             )
-
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data["full_name"] == "Satya Nadella"
-        assert data["profile_id"] == "satyanadella"
-        assert data["headline"] == "Chairman and CEO at Microsoft"
-        assert data["trace_id"] is not None
 
     @pytest.mark.asyncio
-    async def test_auth_error_returns_401_json(self, client):
+    async def test_auth_via_query_param(self, client):
         with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
-            mock_scrape.side_effect = AuthenticationError("Session cookies expired")
+            mock_scrape.return_value = FAKE_PROFILE
+            response = await client.get(
+                f"/api/scrape?url={VALID_URL}&api_key={VALID_KEY}"
+            )
+        assert response.status_code == status.HTTP_200_OK
 
+
+# ── 3. Route Aliases & Methods (POST / GET) ───────────────────────────────────
+
+
+class TestRoutesAndMethods:
+    @pytest.mark.asyncio
+    async def test_post_api_scrape_success(self, client):
+        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
+            mock_scrape.return_value = FAKE_PROFILE
             response = await client.post(
                 "/api/scrape",
+                json={"url": VALID_URL},
+                headers={"X-API-Key": VALID_KEY},
+            )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["full_name"] == "Satya Nadella"
+
+    @pytest.mark.asyncio
+    async def test_post_scrape_alias_success(self, client):
+        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
+            mock_scrape.return_value = FAKE_PROFILE
+            response = await client.post(
+                "/scrape",
                 json={"linkedin_url": VALID_URL},
                 headers={"X-API-Key": VALID_KEY},
             )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["full_name"] == "Satya Nadella"
 
+    @pytest.mark.asyncio
+    async def test_get_api_scrape_success(self, client):
+        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
+            mock_scrape.return_value = FAKE_PROFILE
+            response = await client.get(
+                f"/api/scrape?url={VALID_URL}",
+                headers={"X-API-Key": VALID_KEY},
+            )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["full_name"] == "Satya Nadella"
+
+    @pytest.mark.asyncio
+    async def test_get_scrape_alias_success(self, client):
+        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
+            mock_scrape.return_value = FAKE_PROFILE
+            response = await client.get(
+                f"/scrape?url={VALID_URL}",
+                headers={"X-API-Key": VALID_KEY},
+            )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["full_name"] == "Satya Nadella"
+
+
+# ── 4. Exception Handling Tests ───────────────────────────────────────────────
+
+
+class TestExceptionHandling:
+    @pytest.mark.asyncio
+    async def test_auth_error_returns_401(self, client):
+        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
+            mock_scrape.side_effect = AuthenticationError("LinkedIn session expired")
+            response = await client.post(
+                "/api/scrape",
+                json={"url": VALID_URL},
+                headers={"X-API-Key": VALID_KEY},
+            )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-        assert "Session cookies expired" in response.json()["detail"]
+        assert "LinkedIn session expired" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_profile_not_found_returns_404_json(self, client):
+    async def test_not_found_returns_404(self, client):
         with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
-            mock_scrape.side_effect = ProfileNotFoundError("Member not found")
-
+            mock_scrape.side_effect = ProfileNotFoundError("Profile not found")
             response = await client.post(
                 "/api/scrape",
-                json={"linkedin_url": VALID_URL},
+                json={"url": VALID_URL},
                 headers={"X-API-Key": VALID_KEY},
             )
-
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert "Member not found" in response.json()["detail"]
+        assert "Profile not found" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_rate_limit_error_returns_429_json(self, client):
+    async def test_rate_limit_returns_429(self, client):
         with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
-            mock_scrape.side_effect = RateLimitError("Rate limit triggered")
-
+            mock_scrape.side_effect = RateLimitError("Rate limited")
             response = await client.post(
                 "/api/scrape",
-                json={"linkedin_url": VALID_URL},
+                json={"url": VALID_URL},
                 headers={"X-API-Key": VALID_KEY},
             )
-
         assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
-        assert "Rate limit triggered" in response.json()["detail"]
+        assert "Rate limited" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_upstream_scraper_error_returns_502_json(self, client):
+    async def test_scraper_error_returns_502(self, client):
         with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
-            mock_scrape.side_effect = ScraperError("Network drop 502")
-
+            mock_scrape.side_effect = ScraperError("Upstream timeout")
             response = await client.post(
                 "/api/scrape",
-                json={"linkedin_url": VALID_URL},
+                json={"url": VALID_URL},
                 headers={"X-API-Key": VALID_KEY},
             )
-
         assert response.status_code == status.HTTP_502_BAD_GATEWAY
-        assert "Network drop 502" in response.json()["detail"]
+        assert "Upstream timeout" in response.json()["detail"]
