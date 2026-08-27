@@ -23,7 +23,12 @@ from app.network import (
     VoyagerAPIError,
 )
 from app.schemas import ProfileResponse
-from app.scraper import ScraperError, extract_vanity_slug, scrape_profile
+from app.scraper import (
+    ScraperError,
+    clear_cache,
+    extract_vanity_slug,
+    scrape_profile,
+)
 from tests.fixtures.voyager_payloads import FULL_VOYAGER_PROFILE_VIEW_PAYLOAD
 
 VALID_LINKEDIN_URL = "https://www.linkedin.com/in/satyanadella"
@@ -78,11 +83,12 @@ class TestExtractVanitySlug:
 
 class TestScrapeProfileOrchestration:
     @pytest.fixture(autouse=True)
-    def mock_settings(self, monkeypatch):
+    def patch_settings(self, monkeypatch):
+        clear_cache()
+
         class FakeSettings:
             li_at = "AQEDAT..." + "x" * 50
             jsessionid = '"ajax:1234567890123456789"'
-            internal_api_key = "test_internal_api_key_12345"
             proxy_url = None
             log_level = "INFO"
             max_retries = 3
@@ -92,6 +98,8 @@ class TestScrapeProfileOrchestration:
 
         monkeypatch.setattr(config, "get_settings", lambda: FakeSettings())
         monkeypatch.setattr("app.scraper.get_settings", lambda: FakeSettings())
+        yield
+        clear_cache()
 
     @pytest.mark.asyncio
     async def test_successful_scrape_profile(self):
@@ -116,8 +124,13 @@ class TestScrapeProfileOrchestration:
             mock_client.get_profile_view.assert_awaited_once_with("satyanadella")
 
     @pytest.mark.asyncio
-    async def test_auth_error_propagates(self):
-        with patch("app.scraper.VoyagerClient") as mock_client_cls:
+    async def test_auth_error_triggers_public_failover(self):
+        with (
+            patch("app.scraper.VoyagerClient") as mock_client_cls,
+            patch(
+                "app.scraper.scrape_public_profile", new_callable=AsyncMock
+            ) as mock_public,
+        ):
             mock_client = AsyncMock()
             mock_client.__aenter__.return_value = mock_client
             mock_client.__aexit__.return_value = None
@@ -125,9 +138,15 @@ class TestScrapeProfileOrchestration:
                 side_effect=AuthenticationError("Invalid credentials")
             )
             mock_client_cls.return_value = mock_client
+            mock_public.return_value = ProfileResponse(
+                linkedin_url=VALID_LINKEDIN_URL,
+                profile_id="satyanadella",
+                full_name="Satya Nadella Guest",
+            )
 
-            with pytest.raises(AuthenticationError, match="Invalid credentials"):
-                await scrape_profile(VALID_LINKEDIN_URL)
+            result = await scrape_profile(VALID_LINKEDIN_URL)
+            assert result.full_name == "Satya Nadella Guest"
+            mock_public.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_profile_not_found_propagates(self):

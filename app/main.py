@@ -4,6 +4,7 @@ app/main.py
 FastAPI application — Production ASGI entry point for Tross.
 
 Endpoints:
+  GET  /              — Interactive Dark-Mode Web Playground
   POST /api/scrape   — Scrape a LinkedIn profile (body JSON)
   GET  /api/scrape   — Scrape a LinkedIn profile (query param ?url=...)
   POST /scrape       — Alias route
@@ -23,13 +24,14 @@ from contextlib import asynccontextmanager
 from fastapi import (
     Depends,
     FastAPI,
+    Header,
     HTTPException,
     Query,
     Request,
     Security,
     status,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
@@ -39,6 +41,7 @@ from app.network import (
     ProfileNotFoundError,
     RateLimitError,
 )
+from app.playground import get_playground_html
 from app.schemas import ErrorResponse, ProfileResponse, ScrapeRequest
 from app.scraper import ScraperError, scrape_profile
 
@@ -46,30 +49,32 @@ from app.scraper import ScraperError, scrape_profile
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):  # noqa: ANN001
-    settings = get_settings()
-    configure_logging(settings.log_level)
-    get_logger(__name__).info("tross.startup", log_level=settings.log_level)
+async def lifespan(app: FastAPI):
+    """Application startup and graceful shutdown lifecycle handler."""
+    configure_logging()
+    logger = get_logger("app.lifecycle")
+    logger.info("tross.startup", message="Tross LinkedIn Scraper API starting up...")
     yield
-    get_logger(__name__).info("tross.shutdown")
+    logger.info("tross.shutdown", message="Tross shutting down...")
 
 
+# ── FastAPI App Instance ──────────────────────────────────────────────────────
 app = FastAPI(
-    title="Tross — LinkedIn Scraper API",
+    title="Tross: LinkedIn Profile API",
     description=(
-        "Production-ready, reverse-engineered LinkedIn profile scraper API. "
-        "Accepts a LinkedIn profile URL and returns structured profile JSON."
+        "Reverse-engineered, production-ready REST API for extracting structured LinkedIn "
+        "profile information using high-fidelity Voyager client TLS impersonation."
     ),
-    version="1.0.0",
+    version="0.1.0",
+    lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
-    lifespan=lifespan,
+    openapi_url="/openapi.json",
 )
 
 logger = get_logger(__name__)
 
-# ── Security Schemes ──────────────────────────────────────────────────────────
-
+# ── Security & Authentication ─────────────────────────────────────────────────
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -81,49 +86,48 @@ async def verify_api_key(
 ) -> None:
     """
     Validate inbound API key from multiple sources:
-      1. 'X-API-Key' header
-      2. 'Authorization: Bearer <key>' header
+      1. 'X-API-Key' request header
+      2. 'Authorization: Bearer <key>' request header
       3. '?api_key=<key>' query parameter
     """
     settings = get_settings()
-    expected_key = settings.internal_api_key
 
-    token: str | None = None
+    provided_key: str | None = None
     if x_api_key:
-        token = x_api_key.strip()
-    elif auth_header and hasattr(auth_header, "credentials"):
-        token = auth_header.credentials.strip()
+        provided_key = x_api_key.strip()
+    elif auth_header and auth_header.credentials:
+        provided_key = auth_header.credentials.strip()
     elif api_key_query:
-        token = api_key_query.strip()
+        provided_key = api_key_query.strip()
 
-    if not token or token != expected_key:
+    if not provided_key or provided_key != settings.internal_api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key. Provide via 'X-API-Key' header, Bearer token, or '?api_key=' parameter.",
+            detail=(
+                "Invalid or missing API key. Provide via 'X-API-Key' header, "
+                "Bearer token, or '?api_key=' parameter."
+            ),
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
 
-# ── Exception Handlers ────────────────────────────────────────────────────────
+# ── Global Exception Handlers ─────────────────────────────────────────────────
 
 
 @app.exception_handler(AuthenticationError)
-async def auth_error_handler(
-    request: Request, exc: AuthenticationError
-) -> JSONResponse:
+async def handle_auth_error(request: Request, exc: AuthenticationError) -> JSONResponse:
     logger.error("api.auth_error", detail=str(exc))
     return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
         content=ErrorResponse(
-            detail=str(exc),
+            detail=f"LinkedIn authentication failure: {exc}",
             status_code=status.HTTP_401_UNAUTHORIZED,
         ).model_dump(),
     )
 
 
 @app.exception_handler(ProfileNotFoundError)
-async def not_found_handler(
-    request: Request, exc: ProfileNotFoundError
-) -> JSONResponse:
+async def handle_not_found(request: Request, exc: ProfileNotFoundError) -> JSONResponse:
     logger.warning("api.profile_not_found", detail=str(exc))
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -135,19 +139,19 @@ async def not_found_handler(
 
 
 @app.exception_handler(RateLimitError)
-async def rate_limit_handler(request: Request, exc: RateLimitError) -> JSONResponse:
-    logger.error("api.rate_limit_error", detail=str(exc))
+async def handle_rate_limit(request: Request, exc: RateLimitError) -> JSONResponse:
+    logger.warning("api.rate_limit_exceeded", detail=str(exc))
     return JSONResponse(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         content=ErrorResponse(
-            detail=str(exc),
+            detail=f"LinkedIn rate limit encountered: {exc}",
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         ).model_dump(),
     )
 
 
 @app.exception_handler(ScraperError)
-async def scraper_error_handler(request: Request, exc: ScraperError) -> JSONResponse:
+async def handle_scraper_error(request: Request, exc: ScraperError) -> JSONResponse:
     logger.error("api.scraper_error", detail=str(exc))
     return JSONResponse(
         status_code=status.HTTP_502_BAD_GATEWAY,
@@ -159,6 +163,17 @@ async def scraper_error_handler(request: Request, exc: ScraperError) -> JSONResp
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
+
+@app.get(
+    "/",
+    response_class=HTMLResponse,
+    tags=["meta"],
+    summary="Interactive Web Playground",
+)
+async def playground() -> HTMLResponse:
+    """Serve the modern Dark-Mode Web Playground single-page application."""
+    return HTMLResponse(content=get_playground_html(), status_code=status.HTTP_200_OK)
 
 
 @app.get("/health", tags=["meta"], summary="Health Check")
@@ -204,7 +219,11 @@ async def health() -> dict[str, str]:
     dependencies=[Depends(verify_api_key)],
     include_in_schema=False,
 )
-async def scrape_post(body: ScrapeRequest) -> ProfileResponse:
+async def scrape_post(
+    body: ScrapeRequest,
+    x_li_at: str | None = Header(default=None, alias="X-Li-At"),
+    x_jsessionid: str | None = Header(default=None, alias="X-JSESSIONID"),
+) -> ProfileResponse:
     """
     Scrape a LinkedIn profile URL via POST request.
 
@@ -218,7 +237,15 @@ async def scrape_post(body: ScrapeRequest) -> ProfileResponse:
     trace_id = new_trace_id()
     logger.info("api.scrape.post", url=body.linkedin_url, trace_id=trace_id)
 
-    profile = await scrape_profile(body.linkedin_url)
+    override_cookies: dict[str, str] | None = None
+    if x_li_at or x_jsessionid:
+        override_cookies = {}
+        if x_li_at:
+            override_cookies["li_at"] = x_li_at
+        if x_jsessionid:
+            override_cookies["JSESSIONID"] = x_jsessionid
+
+    profile = await scrape_profile(body.linkedin_url, override_cookies=override_cookies)
     profile.trace_id = trace_id
 
     logger.info(
@@ -262,6 +289,8 @@ async def scrape_get(
         description="LinkedIn profile URL or member vanity slug",
         examples=["https://www.linkedin.com/in/satyanadella/"],
     ),
+    x_li_at: str | None = Header(default=None, alias="X-Li-At"),
+    x_jsessionid: str | None = Header(default=None, alias="X-JSESSIONID"),
 ) -> ProfileResponse:
     """
     Scrape a LinkedIn profile URL via GET query parameter.
@@ -271,7 +300,15 @@ async def scrape_get(
     trace_id = new_trace_id()
     logger.info("api.scrape.get", url=url, trace_id=trace_id)
 
-    profile = await scrape_profile(url)
+    override_cookies: dict[str, str] | None = None
+    if x_li_at or x_jsessionid:
+        override_cookies = {}
+        if x_li_at:
+            override_cookies["li_at"] = x_li_at
+        if x_jsessionid:
+            override_cookies["JSESSIONID"] = x_jsessionid
+
+    profile = await scrape_profile(url, override_cookies=override_cookies)
     profile.trace_id = trace_id
 
     logger.info(

@@ -3,12 +3,12 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg)](https://fastapi.tiangolo.com)
 [![uv](https://img.shields.io/badge/managed%20by-uv-DE5FE9.svg)](https://github.com/astral-sh/uv)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests](https://img.shields.io/badge/tests-97%20passed-brightgreen.svg)]()
+[![CI](https://github.com/simon-derock/Tross/actions/workflows/ci.yml/badge.svg)](https://github.com/simon-derock/Tross/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-126%20passed-brightgreen.svg)]()
 
 > **Tross** is a high-precision, production-ready backend API that reverse-engineers LinkedIn's internal **Voyager REST API**. It accepts a LinkedIn profile URL over an HTTPS POST or GET request and returns comprehensive, structured, typed JSON profile data.
 >
-> Built with **Python 3.12+**, **FastAPI**, **curl_cffi** (Chrome 131 TLS impersonation), and deployed as a serverless function on **Vercel**.
+> Features an **Interactive Dark-Mode Web Playground at `/`**, **4-Tier Anti-Fragile Failover Engine** (zero demo downtime), **In-Memory LRU Caching (<5ms)**, and **curl_cffi** (Chrome 131 TLS impersonation). Deployed serverless on **Vercel**.
 
 ---
 

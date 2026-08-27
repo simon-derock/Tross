@@ -26,7 +26,7 @@ def _valid_overrides(**kwargs) -> dict:
 
 class TestSettingsValidation:
     def test_valid_settings_instantiate(self):
-        s = Settings.model_validate(_valid_overrides())
+        s = Settings(_env_file=None, **_valid_overrides())
         assert s.li_at == "a" * 20
         assert s.max_retries == 3
         assert s.retry_backoff_seconds == 2.0
@@ -36,27 +36,27 @@ class TestSettingsValidation:
         data = _valid_overrides()
         del data["li_at"]
         with pytest.raises(ValidationError, match="li_at"):
-            Settings.model_validate(data)
+            Settings(_env_file=None, **data)
 
     def test_short_li_at_raises(self):
         with pytest.raises(ValidationError, match="li_at"):
-            Settings.model_validate(_valid_overrides(li_at="short"))
+            Settings(_env_file=None, **_valid_overrides(li_at="short"))
 
     def test_missing_jsessionid_raises(self):
         data = _valid_overrides()
         del data["jsessionid"]
         with pytest.raises(ValidationError, match="jsessionid"):
-            Settings.model_validate(data)
+            Settings(_env_file=None, **data)
 
     def test_short_jsessionid_raises(self):
         with pytest.raises(ValidationError, match="jsessionid"):
-            Settings.model_validate(_valid_overrides(jsessionid="short"))
+            Settings(_env_file=None, **_valid_overrides(jsessionid="short"))
 
     def test_missing_api_key_raises(self):
         data = _valid_overrides()
         del data["internal_api_key"]
         with pytest.raises(ValidationError, match="internal_api_key"):
-            Settings.model_validate(data)
+            Settings(_env_file=None, **data)
 
     def test_short_api_key_raises(self):
         with pytest.raises(ValidationError, match="internal_api_key"):
