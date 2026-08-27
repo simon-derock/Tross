@@ -85,7 +85,7 @@ class TestHealthEndpoint:
         assert data["service"] == "tross"
 
 
-# ── 2. Open Direct Access & Route Aliases (POST / GET) ────────────────────────
+# ── 2. Open Direct Access (POST /api/scrape) ──────────────────────────────────
 
 
 class TestRoutesAndMethods:
@@ -107,26 +107,6 @@ class TestRoutesAndMethods:
             response = await client.post(
                 "/scrape",
                 json={"linkedin_url": VALID_URL},
-            )
-        assert response.status_code == status.HTTP_200_OK
-        assert response.json()["full_name"] == "Satya Nadella"
-
-    @pytest.mark.asyncio
-    async def test_get_api_scrape_open_access_no_key(self, client):
-        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
-            mock_scrape.return_value = FAKE_PROFILE
-            response = await client.get(
-                f"/api/scrape?url={VALID_URL}",
-            )
-        assert response.status_code == status.HTTP_200_OK
-        assert response.json()["full_name"] == "Satya Nadella"
-
-    @pytest.mark.asyncio
-    async def test_get_scrape_alias_success(self, client):
-        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
-            mock_scrape.return_value = FAKE_PROFILE
-            response = await client.get(
-                f"/scrape?url={VALID_URL}",
             )
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["full_name"] == "Satya Nadella"

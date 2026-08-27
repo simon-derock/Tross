@@ -21,7 +21,6 @@ from contextlib import asynccontextmanager
 from fastapi import (
     FastAPI,
     Header,
-    Query,
     Request,
     status,
 )
@@ -217,66 +216,6 @@ async def scrape_post(
             override_cookies["JSESSIONID"] = x_jsessionid
 
     profile = await scrape_profile(body.linkedin_url, override_cookies=override_cookies)
-    profile.trace_id = trace_id
-
-    logger.info(
-        "api.scrape.success",
-        name=profile.full_name,
-        profile_id=profile.profile_id,
-        trace_id=trace_id,
-    )
-    return profile
-
-
-@app.get(
-    "/api/scrape",
-    response_model=ProfileResponse,
-    tags=["scraper"],
-    summary="Scrape a LinkedIn profile (GET)",
-    responses={
-        200: {
-            "description": "Profile scraped successfully",
-            "model": ProfileResponse,
-        },
-        404: {"model": ErrorResponse},
-        422: {"description": "Validation error"},
-        429: {"model": ErrorResponse},
-        502: {"model": ErrorResponse},
-    },
-)
-@app.get(
-    "/scrape",
-    response_model=ProfileResponse,
-    tags=["scraper"],
-    include_in_schema=False,
-)
-async def scrape_get(
-    url: str = Query(
-        ...,
-        alias="url",
-        description="LinkedIn profile URL or member vanity slug",
-        examples=["https://www.linkedin.com/in/satyanadella/"],
-    ),
-    x_li_at: str | None = Header(default=None, alias="X-Li-At"),
-    x_jsessionid: str | None = Header(default=None, alias="X-JSESSIONID"),
-) -> ProfileResponse:
-    """
-    Scrape a LinkedIn profile URL via GET query parameter. Direct open access for recruiters and evaluators.
-
-    **Example:** `/api/scrape?url=https://www.linkedin.com/in/satyanadella/`
-    """
-    trace_id = new_trace_id()
-    logger.info("api.scrape.get", url=url, trace_id=trace_id)
-
-    override_cookies: dict[str, str] | None = None
-    if x_li_at or x_jsessionid:
-        override_cookies = {}
-        if x_li_at:
-            override_cookies["li_at"] = x_li_at
-        if x_jsessionid:
-            override_cookies["JSESSIONID"] = x_jsessionid
-
-    profile = await scrape_profile(url, override_cookies=override_cookies)
     profile.trace_id = trace_id
 
     logger.info(

@@ -92,8 +92,8 @@ class TestHighConcurrencyStress:
         assert len(set(trace_ids)) == 50
 
     @pytest.mark.asyncio
-    async def test_mixed_get_and_post_concurrent_traffic(self):
-        """Simulate concurrent mixed traffic across GET and POST endpoints."""
+    async def test_concurrent_traffic_across_routes(self):
+        """Simulate concurrent traffic across POST endpoints."""
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://testserver"
         ) as client:
@@ -113,13 +113,15 @@ class TestHighConcurrencyStress:
                             client.post(
                                 "/api/scrape",
                                 json={"url": f"https://www.linkedin.com/in/user-{i}"},
-                                headers={"X-API-Key": VALID_KEY},
                             )
                         )
                     else:
                         tasks.append(
-                            client.get(
-                                f"/api/scrape?url=https://www.linkedin.com/in/user-{i}&api_key={VALID_KEY}"
+                            client.post(
+                                "/scrape",
+                                json={
+                                    "linkedin_url": f"https://www.linkedin.com/in/user-{i}"
+                                },
                             )
                         )
 
