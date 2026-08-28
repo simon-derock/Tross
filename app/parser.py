@@ -151,14 +151,49 @@ def parse_voyager_profile(
     if "included" in data and isinstance(data["included"], list):
         included_entities = data["included"]
         if not profile_data:
-            profile_data = next(
-                (
-                    e
-                    for e in included_entities
-                    if isinstance(e, dict) and e.get("$type", "").endswith(".Profile")
-                ),
-                {},
-            )
+            for e in included_entities:
+                if isinstance(e, dict) and (
+                    "firstName" in e
+                    or "publicIdentifier" in e
+                    or ".Profile" in e.get("$type", "")
+                ):
+                    profile_data = e
+                    break
+
+        # If specific fields are missing on the primary profile entity, search across included entities
+        for ent in included_entities:
+            if not isinstance(ent, dict):
+                continue
+            if not profile_data.get("firstName") and ent.get("firstName"):
+                profile_data["firstName"] = ent.get("firstName")
+            if not profile_data.get("lastName") and ent.get("lastName"):
+                profile_data["lastName"] = ent.get("lastName")
+            if not profile_data.get("headline") and ent.get("headline"):
+                profile_data["headline"] = ent.get("headline")
+            if not profile_data.get("summary") and (
+                ent.get("summary") or ent.get("summaryText") or ent.get("about")
+            ):
+                profile_data["summary"] = (
+                    ent.get("summary") or ent.get("summaryText") or ent.get("about")
+                )
+            if not profile_data.get("locationName") and (
+                ent.get("locationName") or ent.get("geoLocationName")
+            ):
+                profile_data["locationName"] = ent.get("locationName") or ent.get(
+                    "geoLocationName"
+                )
+            if not profile_data.get("geoCountryName") and ent.get("geoCountryName"):
+                profile_data["geoCountryName"] = ent.get("geoCountryName")
+            if not profile_data.get("profilePicture") and (
+                ent.get("profilePicture")
+                or ent.get("picture")
+                or ent.get("displayImageReference")
+            ):
+                profile_data["profilePicture"] = (
+                    ent.get("profilePicture")
+                    or ent.get("picture")
+                    or ent.get("displayImageReference")
+                )
 
     # ── Basic Identification ──────────────────────────────────────────────────
     first_name = profile_data.get("firstName") or None
@@ -182,6 +217,7 @@ def parse_voyager_profile(
     location = (
         profile_data.get("locationName")
         or profile_data.get("location", {}).get("name")
+        or profile_data.get("geoLocationName")
         or None
     )
     country = (
@@ -198,7 +234,11 @@ def parse_voyager_profile(
     connections = profile_data.get("connectionsCount")
 
     # ── Profile & Background Images ───────────────────────────────────────────
-    profile_img = _extract_best_image_url(profile_data.get("profilePicture"))
+    profile_img = (
+        _extract_best_image_url(profile_data.get("profilePicture"))
+        or _extract_best_image_url(profile_data.get("picture"))
+        or _extract_best_image_url(profile_data.get("displayImageReference"))
+    )
     background_img = _extract_best_image_url(profile_data.get("backgroundPicture"))
 
     # ── Experience Extraction ─────────────────────────────────────────────────
