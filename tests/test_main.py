@@ -90,6 +90,18 @@ class TestHealthEndpoint:
 
 class TestRoutesAndMethods:
     @pytest.mark.asyncio
+    async def test_post_api_profile_success(self, client):
+        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
+            mock_scrape.return_value = FAKE_PROFILE
+            response = await client.post(
+                "/api/profile",
+                json={"url": VALID_URL},
+            )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["full_name"] == "Satya Nadella"
+        assert response.json()["profile_id"] == "satyanadella"
+
+    @pytest.mark.asyncio
     async def test_post_api_scrape_open_access_no_key(self, client):
         with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
             mock_scrape.return_value = FAKE_PROFILE
@@ -107,6 +119,17 @@ class TestRoutesAndMethods:
             response = await client.post(
                 "/scrape",
                 json={"linkedin_url": VALID_URL},
+            )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["full_name"] == "Satya Nadella"
+
+    @pytest.mark.asyncio
+    async def test_post_profile_alias_success(self, client):
+        with patch("app.main.scrape_profile", new_callable=AsyncMock) as mock_scrape:
+            mock_scrape.return_value = FAKE_PROFILE
+            response = await client.post(
+                "/profile",
+                json={"url": VALID_URL},
             )
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["full_name"] == "Satya Nadella"

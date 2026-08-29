@@ -108,7 +108,14 @@ class TestHighConcurrencyStress:
 
                 tasks = []
                 for i in range(30):
-                    if i % 2 == 0:
+                    if i % 3 == 0:
+                        tasks.append(
+                            client.post(
+                                "/api/profile",
+                                json={"url": f"https://www.linkedin.com/in/user-{i}"},
+                            )
+                        )
+                    elif i % 3 == 1:
                         tasks.append(
                             client.post(
                                 "/api/scrape",

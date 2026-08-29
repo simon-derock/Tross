@@ -199,3 +199,7 @@ class ErrorResponse(BaseModel):
     detail: str = Field(description="Descriptive error explanation")
     status_code: int = Field(description="HTTP status code")
     trace_id: str | None = Field(default=None, description="Trace ID for debugging")
+
+
+# ── Aliases ───────────────────────────────────────────────────────────────────
+ProfileRequest = ScrapeRequest
