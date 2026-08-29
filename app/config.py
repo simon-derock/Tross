@@ -9,7 +9,7 @@ with safe defaults for open public API access.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,10 +26,12 @@ class Settings(BaseSettings):
     # ── LinkedIn Session Cookies (optional backend secrets) ───────────────────
     li_at: str = Field(
         default="",
+        validation_alias=AliasChoices("li_at", "li_at_cookie", "li-at"),
         description="LinkedIn li_at session cookie",
     )
     jsessionid: str = Field(
         default="",
+        validation_alias=AliasChoices("jsessionid", "jsession_id"),
         description="LinkedIn JSESSIONID cookie",
     )
 
@@ -52,8 +54,8 @@ class Settings(BaseSettings):
     @field_validator("jsessionid")
     @classmethod
     def strip_jsessionid_quotes(cls, v: str) -> str:
-        """LinkedIn sometimes wraps JSESSIONID in quotes — strip them."""
-        return v.strip('"')
+        """LinkedIn sometimes wraps JSESSIONID in quotes or prefixes with ajax: — clean it."""
+        return v.replace("ajax:", "").strip('"').strip()
 
 
 @lru_cache(maxsize=1)

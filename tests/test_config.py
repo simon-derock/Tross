@@ -39,8 +39,16 @@ class TestSettingsValidation:
         s = Settings(
             _env_file=None, **_valid_overrides(jsessionid='"ajax:1234567890123456789"')
         )
-        assert s.jsessionid == "ajax:1234567890123456789"
+        assert s.jsessionid == "1234567890123456789"
         assert '"' not in s.jsessionid
+        assert "ajax:" not in s.jsessionid
+
+    def test_li_at_cookie_alias(self):
+        s = Settings(
+            _env_file=None,
+            li_at_cookie="my_mobile_li_at_token_12345",
+        )
+        assert s.li_at == "my_mobile_li_at_token_12345"
 
     def test_proxy_url_optional(self):
         s = Settings(
