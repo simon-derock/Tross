@@ -114,6 +114,9 @@ def build_voyager_headers(
         "x-li-lang": "en_US",
         "x-li-track": json.dumps(payload),
         "x-li-page-instance": f"urn:li:page:d_flagship3_profile_view_base;{uuid.uuid4()}",
+        # Mobile SDK headers: decouples session from desktop browser lifecycle
+        "x-li-src": "msdk",
+        "x-li-device-id": "urn:li:device:vercel-serverless-001",
         "csrf-token": csrf_token,
         "Referer": f"https://www.linkedin.com/in/{vanity_slug}/",
         "sec-ch-ua": '"Chromium";v="131", "Not_A Brand";v="24"',
@@ -172,8 +175,8 @@ class VoyagerClient:
 
     @property
     def csrf_token(self) -> str:
-        """Derive clean CSRF token from JSESSIONID by stripping surrounding double quotes."""
-        return self.jsessionid.strip('"')
+        """Derive clean CSRF token from JSESSIONID by stripping 'ajax:' and surrounding quotes."""
+        return self.jsessionid.replace("ajax:", "").strip('"').strip()
 
     @property
     def cookies(self) -> dict[str, str]:
@@ -213,12 +216,16 @@ class VoyagerClient:
             await self._session.close()
             self._session = None
 
-    async def get_profile_view(self, vanity_slug: str) -> dict[str, Any]:
+    async def get_profile_view(
+        self,
+        vanity_slug: str,
+        decoration_id: str = "com.linkedin.voyager.dash.deco.identity.profile.FullProfileWithEntities-118",
+    ) -> dict[str, Any]:
         """
         Fetch and parse the Voyager profile view endpoint for a given vanity slug.
 
         Endpoint:
-          https://www.linkedin.com/voyager/api/identity/profiles/{vanity_slug}/profileView
+          https://www.linkedin.com/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity={vanity_slug}&decorationId={decoration_id}
 
         Retries:
           Retries on HTTP 429, 500, 502, 503, 504, 999 with exponential backoff.
@@ -239,7 +246,7 @@ class VoyagerClient:
         url = (
             f"https://www.linkedin.com/voyager/api/identity/dash/profiles"
             f"?q=memberIdentity&memberIdentity={clean_slug}"
-            f"&decorationId=com.linkedin.voyager.dash.deco.identity.profile.FullProfileWithEntities-1"
+            f"&decorationId={decoration_id}"
         )
         headers = self.build_headers(clean_slug)
         attempt_count = 0

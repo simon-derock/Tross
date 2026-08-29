@@ -38,7 +38,8 @@ from app.network import (
 
 FAKE_LI_AT = "AQEDAT..." + "x" * 50
 FAKE_JSESSIONID_QUOTED = '"ajax:1234567890123456789"'
-FAKE_JSESSIONID_UNQUOTED = "ajax:1234567890123456789"
+FAKE_JSESSIONID_RAW = "ajax:1234567890123456789"
+FAKE_CSRF_CLEAN = "1234567890123456789"
 FAKE_SLUG = "satyanadella"
 
 
@@ -63,29 +64,30 @@ def _make_mock_response(
 
 
 class TestCSRFAndCookies:
-    def test_csrf_token_strips_enclosing_quotes(self):
+    def test_csrf_token_strips_enclosing_quotes_and_ajax_prefix(self):
         client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_JSESSIONID_QUOTED)
-        assert client.csrf_token == FAKE_JSESSIONID_UNQUOTED
+        assert client.csrf_token == FAKE_CSRF_CLEAN
         assert not client.csrf_token.startswith('"')
         assert not client.csrf_token.endswith('"')
+        assert not client.csrf_token.startswith("ajax:")
 
-    def test_csrf_token_preserves_unquoted_string(self):
-        client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_JSESSIONID_UNQUOTED)
-        assert client.csrf_token == FAKE_JSESSIONID_UNQUOTED
+    def test_csrf_token_preserves_clean_string(self):
+        client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_CSRF_CLEAN)
+        assert client.csrf_token == FAKE_CSRF_CLEAN
 
     def test_cookies_dict_formatting(self):
         client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_JSESSIONID_QUOTED)
         cookies = client.cookies
         assert cookies["li_at"] == FAKE_LI_AT
-        assert cookies["JSESSIONID"] == f'"{FAKE_JSESSIONID_UNQUOTED}"'
+        assert cookies["JSESSIONID"] == f'"{FAKE_CSRF_CLEAN}"'
 
     def test_init_with_cookies_dict(self):
         client = VoyagerClient(
             cookies={"li_at": FAKE_LI_AT, "JSESSIONID": FAKE_JSESSIONID_QUOTED}
         )
         assert client.li_at == FAKE_LI_AT
-        assert client.csrf_token == FAKE_JSESSIONID_UNQUOTED
-        assert client.cookies["JSESSIONID"] == f'"{FAKE_JSESSIONID_UNQUOTED}"'
+        assert client.csrf_token == FAKE_CSRF_CLEAN
+        assert client.cookies["JSESSIONID"] == f'"{FAKE_CSRF_CLEAN}"'
 
 
 # ── 2. Header Construction Tests ──────────────────────────────────────────────
@@ -94,7 +96,7 @@ class TestCSRFAndCookies:
 class TestHeaderConstruction:
     def test_header_user_agent_chrome131(self):
         headers = build_voyager_headers(
-            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_CSRF_CLEAN
         )
         assert "User-Agent" in headers
         assert "Chrome/131" in headers["User-Agent"]
@@ -102,13 +104,20 @@ class TestHeaderConstruction:
 
     def test_header_restli_protocol_version(self):
         headers = build_voyager_headers(
-            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_CSRF_CLEAN
         )
         assert headers["x-restli-protocol-version"] == "2.0.0"
 
+    def test_header_mobile_sdk_decoupling(self):
+        headers = build_voyager_headers(
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_CSRF_CLEAN
+        )
+        assert headers["x-li-src"] == "msdk"
+        assert "urn:li:device:" in headers["x-li-device-id"]
+
     def test_header_sec_ch_ua(self):
         headers = build_voyager_headers(
-            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_CSRF_CLEAN
         )
         assert headers["sec-ch-ua"] == '"Chromium";v="131", "Not_A Brand";v="24"'
         assert headers["sec-ch-ua-mobile"] == "?0"
@@ -116,7 +125,7 @@ class TestHeaderConstruction:
 
     def test_header_accept_and_language(self):
         headers = build_voyager_headers(
-            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_CSRF_CLEAN
         )
         assert headers["Accept"] == "application/vnd.linkedin.normalized+json+2.1"
         assert headers["Accept-Language"] == "en-US,en;q=0.9"
@@ -124,14 +133,14 @@ class TestHeaderConstruction:
 
     def test_header_csrf_and_referer(self):
         headers = build_voyager_headers(
-            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_CSRF_CLEAN
         )
-        assert headers["csrf-token"] == FAKE_JSESSIONID_UNQUOTED
+        assert headers["csrf-token"] == FAKE_CSRF_CLEAN
         assert headers["Referer"] == f"https://www.linkedin.com/in/{FAKE_SLUG}/"
 
     def test_header_sec_fetch_directives(self):
         headers = build_voyager_headers(
-            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_CSRF_CLEAN
         )
         assert headers["sec-fetch-dest"] == "empty"
         assert headers["sec-fetch-mode"] == "cors"
@@ -139,7 +148,7 @@ class TestHeaderConstruction:
 
     def test_header_tracking_is_valid_json(self):
         headers = build_voyager_headers(
-            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_CSRF_CLEAN
         )
         track_data = json.loads(headers["x-li-track"])
         assert track_data["clientVersion"] == "1.13.19790"
@@ -148,10 +157,10 @@ class TestHeaderConstruction:
 
     def test_header_dynamic_page_instance_urn(self):
         headers1 = build_voyager_headers(
-            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_CSRF_CLEAN
         )
         headers2 = build_voyager_headers(
-            vanity_slug=FAKE_SLUG, csrf_token=FAKE_JSESSIONID_UNQUOTED
+            vanity_slug=FAKE_SLUG, csrf_token=FAKE_CSRF_CLEAN
         )
         urn1 = headers1["x-li-page-instance"]
         urn2 = headers2["x-li-page-instance"]
@@ -184,7 +193,7 @@ class TestClientLifecycleAndProxy:
                     impersonate="chrome131",
                     cookies={
                         "li_at": FAKE_LI_AT,
-                        "JSESSIONID": f'"{FAKE_JSESSIONID_UNQUOTED}"',
+                        "JSESSIONID": f'"{FAKE_CSRF_CLEAN}"',
                     },
                     proxy=None,
                 )
@@ -209,7 +218,7 @@ class TestClientLifecycleAndProxy:
                     impersonate="chrome131",
                     cookies={
                         "li_at": FAKE_LI_AT,
-                        "JSESSIONID": f'"{FAKE_JSESSIONID_UNQUOTED}"',
+                        "JSESSIONID": f'"{FAKE_CSRF_CLEAN}"',
                     },
                     proxy=proxy,
                 )
@@ -257,6 +266,10 @@ class TestGetProfileView:
             )
             assert "identity/dash/profiles" in called_url
             assert f"memberIdentity={FAKE_SLUG}" in called_url
+            assert (
+                "decorationId=com.linkedin.voyager.dash.deco.identity.profile.FullProfileWithEntities-118"
+                in called_url
+            )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("status_code", [401, 403])
