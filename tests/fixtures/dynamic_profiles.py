@@ -345,6 +345,308 @@ def _build_c_level_executive() -> dict[str, Any]:
     }
 
 
+def _build_academic_researcher() -> dict[str, Any]:
+    return {
+        "profile": {
+            "entityUrn": "urn:li:fs_profile:RES_001_HINTON",
+            "firstName": "Geoffrey",
+            "lastName": "Hinton",
+            "headline": "Nobel Laureate in Physics | Professor Emeritus @ University of Toronto | AI Pioneer",
+            "locationName": "Toronto, Ontario, Canada",
+            "geoCountryName": "Canada",
+            "industryName": "Research",
+            "summary": "Deep learning researcher focusing on neural networks, backpropagation, and machine intelligence.",
+            "followersCount": 420000,
+            "connectionsCount": 500,
+            "publicIdentifier": "geoffrey-hinton",
+            "profilePicture": _make_vector_image(
+                "https://media.licdn.com/dms/image/v2/RES_AVATAR/", "hinton_pic"
+            ),
+        },
+        "positionGroupView": {
+            "elements": [
+                {
+                    "name": "University of Toronto",
+                    "positions": [
+                        {
+                            "title": "University Professor Emeritus",
+                            "companyName": "University of Toronto",
+                            "locationName": "Toronto, ON",
+                            "description": "Leading foundational neural network and deep architectures research.",
+                            "timePeriod": {"startDate": {"month": 9, "year": 1987}},
+                        }
+                    ],
+                }
+            ]
+        },
+        "educationView": {
+            "elements": [
+                {
+                    "schoolName": "The University of Edinburgh",
+                    "degreeName": "Doctor of Philosophy (Ph.D.)",
+                    "fieldOfStudy": "Artificial Intelligence",
+                    "timePeriod": {
+                        "startDate": {"year": 1975},
+                        "endDate": {"year": 1978},
+                    },
+                }
+            ]
+        },
+        "skillView": {
+            "elements": [
+                {"name": "Deep Learning"},
+                {"name": "Neural Networks"},
+                {"name": "Artificial Intelligence"},
+                {"name": "Machine Learning"},
+            ]
+        },
+        "certificationView": {
+            "elements": [
+                {
+                    "name": "Nobel Prize in Physics (2024)",
+                    "authority": "The Royal Swedish Academy of Sciences",
+                }
+            ]
+        },
+        "languageView": {
+            "elements": [
+                {"name": "English", "proficiency": "Native or bilingual proficiency"}
+            ]
+        },
+    }
+
+
+def _build_founder_startup() -> dict[str, Any]:
+    return {
+        "profile": {
+            "entityUrn": "urn:li:fs_profile:FOUNDER_001_GUIL",
+            "firstName": "Guillermo",
+            "lastName": "Rauch",
+            "headline": "CEO & Founder at Vercel | Creator of Next.js & Socket.io",
+            "locationName": "San Francisco Bay Area",
+            "geoCountryName": "United States",
+            "industryName": "Internet",
+            "summary": "Building the Frontend Cloud at Vercel. Creator of Socket.io, Next.js, and Mongoose.",
+            "followersCount": 310000,
+            "connectionsCount": 500,
+            "publicIdentifier": "guillermorauch",
+            "profilePicture": _make_vector_image(
+                "https://media.licdn.com/dms/image/v2/FOUNDER_AVATAR/", "rauch_pic"
+            ),
+        },
+        "positionGroupView": {
+            "elements": [
+                {
+                    "name": "Vercel",
+                    "positions": [
+                        {
+                            "title": "Chief Executive Officer & Founder",
+                            "companyName": "Vercel",
+                            "locationName": "San Francisco, CA",
+                            "description": "Making the web faster. Helping developers build and deploy modern web applications.",
+                            "timePeriod": {"startDate": {"month": 11, "year": 2015}},
+                        }
+                    ],
+                }
+            ]
+        },
+        "skillView": {
+            "elements": [
+                {"name": "Serverless Computing"},
+                {"name": "Next.js"},
+                {"name": "React.js"},
+                {"name": "Open Source"},
+                {"name": "JavaScript"},
+            ]
+        },
+        "languageView": {
+            "elements": [
+                {"name": "Spanish", "proficiency": "Native or bilingual proficiency"},
+                {"name": "English", "proficiency": "Full professional proficiency"},
+            ]
+        },
+    }
+
+
+def _build_multilingual_diplomat() -> dict[str, Any]:
+    return {
+        "profile": {
+            "entityUrn": "urn:li:fs_profile:DIP_001_FEIFEI",
+            "firstName": "Fei-Fei",
+            "lastName": "Li",
+            "headline": "Co-Director @ Stanford Institute for Human-Centered AI (HAI) | World Labs CEO",
+            "locationName": "Stanford, California, United States",
+            "geoCountryName": "United States",
+            "industryName": "Higher Education",
+            "summary": "Professor of Computer Science at Stanford University. Creator of ImageNet.",
+            "followersCount": 520000,
+            "connectionsCount": 500,
+            "publicIdentifier": "drfeifeili",
+            "profilePicture": _make_vector_image(
+                "https://media.licdn.com/dms/image/v2/FEIFEI_AVATAR/", "feifei_pic"
+            ),
+        },
+        "positionGroupView": {
+            "elements": [
+                {
+                    "name": "Stanford University",
+                    "positions": [
+                        {
+                            "title": "Professor of Computer Science & Co-Director Stanford HAI",
+                            "companyName": "Stanford University",
+                            "locationName": "Stanford, CA",
+                            "description": "Directing human-centered AI research, spatial intelligence, and computer vision.",
+                            "timePeriod": {"startDate": {"month": 8, "year": 2009}},
+                        }
+                    ],
+                }
+            ]
+        },
+        "educationView": {
+            "elements": [
+                {
+                    "schoolName": "California Institute of Technology",
+                    "degreeName": "Doctor of Philosophy (Ph.D.)",
+                    "fieldOfStudy": "Electrical Engineering",
+                    "timePeriod": {
+                        "startDate": {"year": 2001},
+                        "endDate": {"year": 2005},
+                    },
+                },
+                {
+                    "schoolName": "Princeton University",
+                    "degreeName": "Bachelor of Arts (A.B.)",
+                    "fieldOfStudy": "Physics",
+                    "timePeriod": {
+                        "startDate": {"year": 1995},
+                        "endDate": {"year": 1999},
+                    },
+                },
+            ]
+        },
+        "skillView": {
+            "elements": [
+                {"name": "Computer Vision"},
+                {"name": "Spatial Intelligence"},
+                {"name": "Artificial Intelligence"},
+                {"name": "ImageNet"},
+            ]
+        },
+        "languageView": {
+            "elements": [
+                {"name": "English", "proficiency": "Native or bilingual proficiency"},
+                {
+                    "name": "Mandarin Chinese",
+                    "proficiency": "Native or bilingual proficiency",
+                },
+                {"name": "French", "proficiency": "Professional working proficiency"},
+            ]
+        },
+    }
+
+
+def _build_arabic_regional_lead() -> dict[str, Any]:
+    return {
+        "profile": {
+            "entityUrn": "urn:li:fs_profile:ARABIC_001_TARIQ",
+            "firstName": "طارق (Tariq)",
+            "lastName": "المنصور (Al-Mansoor)",
+            "headline": "نائب الرئيس للهندسة والتقنية | VP of Engineering @ Saudi Digital Hub 🇸🇦 | Vision 2030 Leader",
+            "locationName": "الرياض (Riyadh), Saudi Arabia",
+            "geoCountryName": "Saudi Arabia",
+            "industryName": "Information Technology",
+            "summary": "خبير هندسة برمجيات وبنية تحتية سحابية. يقود التحول الرقمي والذكاء الاصطناعي للمشاريع الكبرى في المملكة العربية السعودية.",
+            "followersCount": 48000,
+            "connectionsCount": 500,
+            "publicIdentifier": "tariq-almansoor",
+        },
+        "positionGroupView": {
+            "elements": [
+                {
+                    "name": "Saudi Digital Hub",
+                    "positions": [
+                        {
+                            "title": "Vice President of Engineering",
+                            "companyName": "Saudi Digital Hub",
+                            "locationName": "Riyadh, Saudi Arabia",
+                            "description": "إدارة الفرق التقنية وتطوير الأنظمة السحابية عالية الأداء لخدمة الملايين.",
+                            "timePeriod": {"startDate": {"month": 3, "year": 2021}},
+                        }
+                    ],
+                }
+            ]
+        },
+        "skillView": {
+            "elements": [
+                {"name": "Cloud Computing (الحوسبة السحابية)"},
+                {"name": "Kubernetes 🐳"},
+                {"name": "Digital Transformation"},
+                {"name": "Cybersecurity"},
+            ]
+        },
+        "languageView": {
+            "elements": [
+                {
+                    "name": "العربية (Arabic)",
+                    "proficiency": "Native or bilingual proficiency",
+                },
+                {"name": "English", "proficiency": "Full professional proficiency"},
+            ]
+        },
+    }
+
+
+def _build_chinese_fintech_lead() -> dict[str, Any]:
+    return {
+        "profile": {
+            "entityUrn": "urn:li:fs_profile:ZH_001_WEI",
+            "firstName": "伟 (Wei)",
+            "lastName": "张 (Zhang)",
+            "headline": "Head of Quantitative AI @ Ant Group 🇨🇳 | High-Frequency Trading & Low Latency Systems",
+            "locationName": "Shanghai, China",
+            "geoCountryName": "China",
+            "industryName": "Financial Technology",
+            "summary": "专注于量化交易、高频低延迟分布式架构以及金融大模型应用。清华大学计算机系校友。",
+            "followersCount": 65000,
+            "connectionsCount": 500,
+            "publicIdentifier": "wei-zhang-quant",
+        },
+        "positionGroupView": {
+            "elements": [
+                {
+                    "name": "Ant Group",
+                    "positions": [
+                        {
+                            "title": "Head of Quantitative AI & Algorithmic Trading",
+                            "companyName": "Ant Group",
+                            "locationName": "Shanghai, China",
+                            "description": "Architecting C++23 low-latency matching engines and distributed machine learning inference pipelines.",
+                            "timePeriod": {"startDate": {"month": 6, "year": 2020}},
+                        }
+                    ],
+                }
+            ]
+        },
+        "skillView": {
+            "elements": [
+                {"name": "Quantitative Finance"},
+                {"name": "C++ / Low-Latency Systems"},
+                {"name": "Machine Learning"},
+                {"name": "Financial Modeling"},
+            ]
+        },
+        "languageView": {
+            "elements": [
+                {
+                    "name": "中文 (Mandarin)",
+                    "proficiency": "Native or bilingual proficiency",
+                },
+                {"name": "English", "proficiency": "Full professional proficiency"},
+            ]
+        },
+    }
+
+
 def _build_minimal_sparse() -> dict[str, Any]:
     return {
         "profile": {
@@ -360,6 +662,11 @@ def _build_minimal_sparse() -> dict[str, Any]:
 PERSONA_REGISTRY: dict[str, Callable[[], dict[str, Any]]] = {
     "software_engineer": _build_software_engineer,
     "c_level_executive": _build_c_level_executive,
+    "academic_researcher": _build_academic_researcher,
+    "founder_startup": _build_founder_startup,
+    "multilingual_diplomat": _build_multilingual_diplomat,
+    "arabic_regional_lead": _build_arabic_regional_lead,
+    "chinese_fintech_lead": _build_chinese_fintech_lead,
     "minimal_sparse_user": _build_minimal_sparse,
 }
 
