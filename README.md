@@ -15,20 +15,21 @@
 
 ## 🏛️ System Architecture & Reverse Engineering Methodology
 
-Unlike naive scrapers that rely on heavy headless browsers (Selenium / Playwright / Puppeteer) or basic HTML scraping, **Tross communicates directly with LinkedIn's internal private REST API ("Voyager")**.
+Unlike naive scrapers that rely on heavy headless browsers (Selenium / Playwright / Puppeteer) or basic HTML scraping, **Tross communicates directly with LinkedIn's internal private REST API ("Voyager Dash")**.
 
 ```
 Client / Consumer
        │
-       │  POST /api/scrape
+       │  POST /api/profile  OR  POST /api/scrape
        │  Body: {"url": "https://www.linkedin.com/in/satyanadella/"}
        ▼
 FastAPI Gateway (Vercel Serverless)
        │
        ├─ 1. In-Memory LRU Cache check (<1ms return on hit)
        ├─ 2. Extracts member vanity slug: "satyanadella"
-       ├─ 3. Derives internal `csrf-token` header from JSESSIONID (unquoted)
-       ├─ 4. Injects authenticated session credentials (LI_AT)
+       ├─ 3. Injects Mobile SDK headers (`x-li-src: msdk`, `x-li-device-id`)
+       ├─ 4. Derives internal `csrf-token` header from JSESSIONID (clean unquoted)
+       ├─ 5. Injects authenticated session credentials (LI_AT / LI_AT_COOKIE)
        │
        ▼
 curl_cffi Chrome 131 Engine
@@ -36,11 +37,12 @@ curl_cffi Chrome 131 Engine
        │  • Replicates Chrome 131 TLS Client Hello (JA3/JA4)
        │  • Replicates Chrome HTTP/2 SETTINGS & window frames
        │  • Sends authentic Restli 2.0 headers & tracking telemetry
+       │  • Mobile SDK lifecycle decoupling (prevents tab-close session invalidation)
        │  • Optional residential proxy pass-through
        │
        ▼
 LinkedIn Internal Microservice Endpoint
-   GET https://www.linkedin.com/voyager/api/identity/dash/profiles?q=memberIdentity...
+   GET https://www.linkedin.com/voyager/api/identity/dash/profiles?q=memberIdentity...&decorationId=com.linkedin.voyager.dash.deco.identity.profile.FullProfileWithEntities-118
        │
        │  Returns raw Restli / JSON payload (~800ms)
        ▼
@@ -57,15 +59,16 @@ Client receives 200 OK with structured profile JSON (< 1.2s)
 
 ---
 
-## 🛡️ Anti-Detection & Protocol Engineering
+## 🛡️ Anti-Detection & Session Persistence
 
-LinkedIn employs **HUMAN Security (formerly PerimeterX)** and internal edge filters to identify automated traffic. Tross implements the following protocol-level countermeasures:
+LinkedIn employs **HUMAN Security (formerly PerimeterX)** and desktop browser page-lifecycle events (e.g. `beforeunload`, websocket beacons) to terminate desktop browser sessions. Tross implements the following protocol-level countermeasures:
 
 | Vector | Challenge | How Tross Solves It |
 |---|---|---|
+| **Session Lifecycle Decoupling** | Desktop cookies (`li_at`) are invalidated by LinkedIn when the desktop browser window/tab is closed. | By injecting **`x-li-src: msdk`** and **`x-li-device-id`**, LinkedIn treats the connection as a persistent native mobile app session, decoupling it from desktop browser lifecycle events. |
 | **TLS Fingerprinting (JA3 / JA4)** | Python `requests` and `httpx` use standard OpenSSL, producing non-browser TLS signatures that trigger **HTTP 999 Request Denied** blocks. | Tross uses **`curl_cffi`** with `impersonate="chrome131"`, compiling against BoringSSL to reproduce Chrome's exact cipher suites, extension ordering, and ALPN negotiation. |
 | **HTTP/2 SETTINGS Frame** | Anti-bot systems evaluate `MAX_CONCURRENT_STREAMS`, window sizes, and header table sizes in initial HTTP/2 frames. | `curl_cffi` reproduces authentic Google Chrome HTTP/2 frame sizes and HPACK compression. |
-| **CSRF Token Validation** | Voyager endpoints reject requests missing valid CSRF protection. | Tross automatically strips enclosing double quotes from the `JSESSIONID` cookie and transmits it via the `csrf-token` header. |
+| **CSRF Token Validation** | Voyager endpoints reject requests missing valid CSRF protection. | Tross automatically cleans `ajax:` prefixes and strips enclosing double quotes from `JSESSIONID`, transmitting it via the `csrf-token` header. |
 | **Telemetry & Header Order** | Missing browser headers or incorrect pseudo-header ordering triggers bot classification. | Tross constructs complete Chrome headers including `x-restli-protocol-version: 2.0.0`, `x-li-track` JSON metadata, dynamic `x-li-page-instance` URNs, `sec-ch-ua`, and context-aware `Referer`. |
 | **Transient Retry Resilience** | Occasional 429 rate limits or 5xx gateway drops. | Managed with **`tenacity`** exponential backoff and jitter across retryable status codes (`429, 500, 502, 503, 504, 999`). |
 | **Sub-Millisecond Caching** | High-concurrency duplicate requests. | Built-in thread-safe **In-Memory LRU Cache** with 24-hour TTL, returning instant responses (<1ms). |
@@ -89,7 +92,7 @@ LinkedIn employs **HUMAN Security (formerly PerimeterX)** and internal edge filt
 
 ### 1. Prerequisites
 - Python 3.12+
-- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) installed:
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) or standard `pip`:
   ```bash
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
@@ -99,35 +102,34 @@ LinkedIn employs **HUMAN Security (formerly PerimeterX)** and internal edge filt
 git clone https://github.com/simon-derock/Tross.git
 cd Tross
 uv sync
+# OR with pip:
+# pip install -r requirements.txt
 ```
 
-### 3. Configure Environment Variables
-Copy the template and fill in your LinkedIn session cookies:
+### 3. Configure Environment Variables & Cookie Extraction
+Copy the template:
 ```bash
 cp .env.example .env
 ```
 
+#### 🔑 Mobile Session Cookie Extraction (Recommended for Long-Lived Sessions):
+1. Open Google Chrome in an **Incognito Window**.
+2. Press `F12` (DevTools) → `Ctrl+Shift+M` (Toggle Device Toolbar) → Select **iPhone 12 Pro** (or any mobile device).
+3. Navigate to `https://www.linkedin.com/login` and log in. *(Mobile emulation instructs LinkedIn to issue a persistent, device-bound session token).*
+4. In DevTools, go to **Application** tab → **Cookies** → `https://www.linkedin.com`.
+5. Copy the values of `li_at` and `JSESSIONID`.
+
 Edit `.env`:
 ```env
-# ── LinkedIn Session Cookies (from your logged-in browser) ────────────────────
-LI_AT=AQEDAT...your_li_at_cookie_here...
-JSESSIONID="ajax:1234567890123456789"
-
-# ── Optional: Proxy Rotation & Tuning ─────────────────────────────────────────
-PROXY_URL=
-LOG_LEVEL=INFO
-MAX_RETRIES=3
-RETRY_BACKOFF_SECONDS=2.0
+LI_AT_COOKIE=your_actual_li_at_value
+JSESSIONID="ajax:your_actual_jsessionid_value"
 ```
 
-> **How to get your LinkedIn cookies:**
-> 1. Open [LinkedIn](https://www.linkedin.com) in your browser and log in.
-> 2. Open Developer Tools (`F12` or `Cmd+Option+I`) → **Application** tab → **Cookies** → `https://www.linkedin.com`.
-> 3. Copy the values of `li_at` and `JSESSIONID`.
-
-### 4. Run the Development Server
+### 4. Run the Server
 ```bash
-uv run uvicorn app.main:app --reload --port 8000
+uv run uvicorn main:app --reload --port 8000
+# OR:
+# uvicorn app.main:app --reload --port 8000
 ```
 - Interactive Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Alternative ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
@@ -153,8 +155,8 @@ uv run ruff format --check .
 
 ## 📖 API Reference
 
-### `POST /api/scrape`
-Extracts structured profile data for a given LinkedIn profile URL.
+### `POST /api/profile` & `POST /api/scrape`
+Extracts comprehensive, structured profile data for a given LinkedIn profile URL.
 
 **Request Headers (Optional Dynamic Overrides):**
 - `Content-Type: application/json`
@@ -171,7 +173,7 @@ Extracts structured profile data for a given LinkedIn profile URL.
 
 **Example cURL Request:**
 ```bash
-curl -X POST "http://localhost:8000/api/scrape" \
+curl -X POST "http://localhost:8000/api/profile" \
      -H "Content-Type: application/json" \
      -d '{"url": "https://www.linkedin.com/in/satyanadella/"}'
 ```
@@ -302,10 +304,18 @@ Tross is configured out-of-the-box for serverless deployment on Vercel:
 1. Push your repository to GitHub.
 2. Import the project into your [Vercel Dashboard](https://vercel.com).
 3. Configure Environment Variables in Project Settings:
-   - `LI_AT`: Your LinkedIn `li_at` cookie value
+   - `LI_AT_COOKIE` or `LI_AT`: Your LinkedIn `li_at` cookie value
    - `JSESSIONID`: Your LinkedIn `JSESSIONID` cookie value
    - `PROXY_URL` *(Optional)*: Residential proxy URL
-4. Vercel automatically deploys via `vercel.json` and `api/index.py`.
+4. Vercel automatically builds and deploys via `vercel.json` and `api/index.py`.
+
+---
+
+## ⚠️ Known Limitations & Operational Considerations
+
+1. **Cookie Expiration & Refreshing:** LinkedIn session cookies (`li_at`) have a natural validity window (typically 30–90 days when extracted via mobile emulation). When the session expires, refresh `LI_AT_COOKIE` and `JSESSIONID` in your Vercel Environment Variables.
+2. **Rate Limiting:** LinkedIn applies account-level and IP-level request throttling. If high volume is expected, configuring `PROXY_URL` with rotating residential proxies is recommended.
+3. **Privacy Controls:** If a user has restricted sections of their profile (e.g. hidden connections, private email, or unlisted education), those specific fields will return null or empty lists as per LinkedIn's privacy policy.
 
 ---
 
