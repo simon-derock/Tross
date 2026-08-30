@@ -16,15 +16,6 @@
       "dest": "api/index.py"
     }
   ],
-  "env": {
-    "LI_AT": "@li_at",
-    "JSESSIONID": "@jsessionid",
-    "INTERNAL_API_KEY": "@internal_api_key",
-    "PROXY_URL": "@proxy_url",
-    "LOG_LEVEL": "INFO",
-    "MAX_RETRIES": "3",
-    "RETRY_BACKOFF_SECONDS": "2.0"
-  },
   "headers": [
     {
       "source": "/api/(.*)",
