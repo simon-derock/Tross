@@ -55,11 +55,10 @@ app = FastAPI(
     title="Tross: LinkedIn Profile API — by PHILIP SIMON DEROCK",
     description=(
         "**Reverse-Engineered LinkedIn Profile API by PHILIP SIMON DEROCK**\n\n"
-        "Reverse-engineered, production-ready REST API for extracting structured "
-        "LinkedIn profile information using high-fidelity Voyager client TLS impersonation.\n\n"
-        "**Direct Public Testing:** Enter any LinkedIn profile URL and click **Execute**."
+        "⚡ **How to Test:** Expand **`POST /api/profile`** below ➔ Click **Try it out** ➔ Enter any LinkedIn profile URL ➔ Click **Execute** to get structured JSON.\n\n"
+        "*(Optional: Pass `X-Li-At` and `X-JSESSIONID` in request headers if testing with custom session credentials).*"
     ),
-    version="0.1.0",
+    version="1.0.0",
     lifespan=lifespan,
     docs_url=None,  # Handled by dark-mode route below
     redoc_url="/redoc",
