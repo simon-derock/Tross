@@ -4,12 +4,20 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![uv](https://img.shields.io/badge/managed%20by-uv-DE5FE9.svg)](https://github.com/astral-sh/uv)
 [![CI](https://github.com/simon-derock/Tross/actions/workflows/ci.yml/badge.svg)](https://github.com/simon-derock/Tross/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-102%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-116%20passed-brightgreen.svg)]()
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
 > **Tross** is a high-precision, production-ready backend API that reverse-engineers LinkedIn's internal **Voyager REST API**. It accepts a LinkedIn profile URL over an HTTPS POST request and returns comprehensive, structured, typed JSON profile data.
 >
 > Developed by **PHILIP SIMON DEROCK**. Built with **Python 3.12+**, **FastAPI**, **curl_cffi** (Chrome 131 TLS impersonation), and native **Swagger UI** (`/docs`). Deployed serverless on **Vercel**.
+
+---
+
+### ⚡ Quick Live Testing & Evaluation
+
+1. **Interactive Swagger UI:** Navigate to `/docs` on your deployed Vercel URL (or `http://localhost:8000/docs` locally).
+2. **Execute Scrape:** Expand **`POST /api/profile`**, click **Try it out**, enter any LinkedIn profile URL (e.g. `{"url": "https://www.linkedin.com/in/satyanadella/"}`), and click **Execute**.
+3. **Optional Dynamic Headers:** If testing with custom credentials, pass your `li_at` and `JSESSIONID` in the `X-Li-At` and `X-JSESSIONID` headers directly in Swagger UI.
 
 ---
 
@@ -155,8 +163,8 @@ uv run ruff format --check .
 
 ## 📖 API Reference
 
-### `POST /api/profile` & `POST /api/scrape`
-Extracts comprehensive, structured profile data for a given LinkedIn profile URL.
+### `POST /api/profile`
+Extracts comprehensive, structured profile data for a given LinkedIn profile URL. *(Note: `/api/scrape` is also supported as an alias).*
 
 **Request Headers (Optional Dynamic Overrides):**
 - `Content-Type: application/json`

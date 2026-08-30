@@ -159,7 +159,7 @@ async def health() -> dict[str, str]:
 
 
 @app.post(
-    "/api/scrape",
+    "/api/profile",
     response_model=ProfileResponse,
     tags=["scraper"],
     summary="Scrape a LinkedIn profile (POST)",
@@ -188,33 +188,10 @@ async def health() -> dict[str, str]:
     },
 )
 @app.post(
-    "/api/profile",
+    "/api/scrape",
     response_model=ProfileResponse,
     tags=["scraper"],
-    summary="Get LinkedIn Profile (POST /api/profile)",
-    responses={
-        200: {
-            "description": "Profile scraped successfully",
-            "model": ProfileResponse,
-        },
-        401: {
-            "model": ErrorResponse,
-            "description": "Invalid or missing LinkedIn session credentials",
-        },
-        404: {
-            "model": ErrorResponse,
-            "description": "LinkedIn profile does not exist",
-        },
-        422: {"description": "Validation error"},
-        429: {
-            "model": ErrorResponse,
-            "description": "LinkedIn rate limit exceeded",
-        },
-        502: {
-            "model": ErrorResponse,
-            "description": "LinkedIn upstream gateway failure",
-        },
-    },
+    include_in_schema=False,
 )
 @app.post(
     "/scrape",
