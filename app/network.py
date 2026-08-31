@@ -175,15 +175,17 @@ class VoyagerClient:
 
     @property
     def csrf_token(self) -> str:
-        """Derive clean CSRF token from JSESSIONID by stripping 'ajax:' and surrounding quotes."""
-        return self.jsessionid.replace("ajax:", "").strip('"').strip()
+        """Derive CSRF token from JSESSIONID by stripping surrounding quotes while preserving prefix."""
+        return self.jsessionid.strip('"').strip()
 
     @property
     def cookies(self) -> dict[str, str]:
         """Format cookie jar required by LinkedIn."""
         return {
             "li_at": self.li_at,
-            "JSESSIONID": f'"{self.csrf_token}"',
+            "JSESSIONID": f'"{self.csrf_token}"'
+            if not self.csrf_token.startswith('"')
+            else self.csrf_token,
         }
 
     def build_headers(self, vanity_slug: str) -> dict[str, str]:

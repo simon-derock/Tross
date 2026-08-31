@@ -64,12 +64,11 @@ def _make_mock_response(
 
 
 class TestCSRFAndCookies:
-    def test_csrf_token_strips_enclosing_quotes_and_ajax_prefix(self):
+    def test_csrf_token_strips_enclosing_quotes_and_preserves_value(self):
         client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_JSESSIONID_QUOTED)
-        assert client.csrf_token == FAKE_CSRF_CLEAN
+        assert client.csrf_token == FAKE_JSESSIONID_RAW
         assert not client.csrf_token.startswith('"')
         assert not client.csrf_token.endswith('"')
-        assert not client.csrf_token.startswith("ajax:")
 
     def test_csrf_token_preserves_clean_string(self):
         client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_CSRF_CLEAN)
@@ -79,15 +78,15 @@ class TestCSRFAndCookies:
         client = VoyagerClient(li_at=FAKE_LI_AT, jsessionid=FAKE_JSESSIONID_QUOTED)
         cookies = client.cookies
         assert cookies["li_at"] == FAKE_LI_AT
-        assert cookies["JSESSIONID"] == f'"{FAKE_CSRF_CLEAN}"'
+        assert cookies["JSESSIONID"] == FAKE_JSESSIONID_QUOTED
 
     def test_init_with_cookies_dict(self):
         client = VoyagerClient(
             cookies={"li_at": FAKE_LI_AT, "JSESSIONID": FAKE_JSESSIONID_QUOTED}
         )
         assert client.li_at == FAKE_LI_AT
-        assert client.csrf_token == FAKE_CSRF_CLEAN
-        assert client.cookies["JSESSIONID"] == f'"{FAKE_CSRF_CLEAN}"'
+        assert client.csrf_token == FAKE_JSESSIONID_RAW
+        assert client.cookies["JSESSIONID"] == FAKE_JSESSIONID_QUOTED
 
 
 # ── 2. Header Construction Tests ──────────────────────────────────────────────
@@ -193,7 +192,7 @@ class TestClientLifecycleAndProxy:
                     impersonate="chrome131",
                     cookies={
                         "li_at": FAKE_LI_AT,
-                        "JSESSIONID": f'"{FAKE_CSRF_CLEAN}"',
+                        "JSESSIONID": FAKE_JSESSIONID_QUOTED,
                     },
                     proxy=None,
                 )
@@ -218,7 +217,7 @@ class TestClientLifecycleAndProxy:
                     impersonate="chrome131",
                     cookies={
                         "li_at": FAKE_LI_AT,
-                        "JSESSIONID": f'"{FAKE_CSRF_CLEAN}"',
+                        "JSESSIONID": FAKE_JSESSIONID_QUOTED,
                     },
                     proxy=proxy,
                 )
