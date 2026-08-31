@@ -297,3 +297,26 @@ class TestSchemaValidationAndRoundTrip:
         assert restored.full_name == profile.full_name
         assert len(restored.experience) == len(profile.experience)
         assert len(restored.skills) == len(profile.skills)
+
+
+# ── 8. Dash Parser Tests ──────────────────────────────────────────────────────
+
+
+class TestParseDashProfile:
+    def test_parse_dash_profile_with_included_parameter(self):
+        from app.parser import parse_dash_profile
+
+        profile = parse_dash_profile(
+            data={"data": {}},
+            included=INCLUDED_ENTITIES_VOYAGER_PAYLOAD["included"],
+            linkedin_url=LINKEDIN_URL,
+            vanity_slug="alice-smith",
+        )
+        assert profile.full_name == "Alice Smith"
+        assert profile.headline == "VP of AI Research"
+        assert len(profile.experience) == 1
+        assert profile.experience[0].title == "VP AI Research"
+        assert profile.experience[0].company == "DeepBio Labs"
+        assert len(profile.education) == 1
+        assert profile.education[0].school == "University of Oxford"
+        assert "Machine Learning" in profile.skills

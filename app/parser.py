@@ -118,12 +118,32 @@ def _extract_best_image_url(
     return None
 
 
-# ── Primary: Pure Voyager JSON Parser ─────────────────────────────────────────
+def parse_dash_profile(
+    data: dict[str, Any],
+    included: list[dict[str, Any]] | None = None,
+    linkedin_url: str = "",
+    vanity_slug: str | None = None,
+) -> ProfileResponse:
+    """
+    Parse a Voyager Dash JSON response (with `data` and `included` entities)
+    into a typed ProfileResponse model. Resolves entityUrn relationships
+    for Experience, Education, Skills, Certifications, and Languages.
+    """
+    return parse_voyager_profile(
+        data=data,
+        included=included,
+        linkedin_url=linkedin_url,
+        vanity_slug=vanity_slug,
+    )
+
+
+# ── Primary: Pure Voyager / Dash JSON Parser ──────────────────────────────────
 
 
 def parse_voyager_profile(
     data: dict[str, Any],
-    linkedin_url: str,
+    included: list[dict[str, Any]] | None = None,
+    linkedin_url: str = "",
     vanity_slug: str | None = None,
 ) -> ProfileResponse:
     """
@@ -132,6 +152,7 @@ def parse_voyager_profile(
 
     Args:
         data: Dict containing parsed JSON from LinkedIn Voyager REST API.
+        included: Optional list of included entities (or extracted from data).
         linkedin_url: Inbound LinkedIn profile URL.
         vanity_slug: Optional profile vanity slug.
 
@@ -148,8 +169,12 @@ def parse_voyager_profile(
         profile_data = data["data"].get("profile", data["data"])
 
     # 2. Handle Restli / Dash included arrays: {"included": [...]}
-    if "included" in data and isinstance(data["included"], list):
+    if included is not None:
+        included_entities = included
+    elif "included" in data and isinstance(data["included"], list):
         included_entities = data["included"]
+
+    if included_entities:
         if not profile_data:
             for e in included_entities:
                 if isinstance(e, dict) and (
@@ -297,14 +322,33 @@ def parse_voyager_profile(
         for ent in included_entities:
             if not isinstance(ent, dict):
                 continue
-            if ent.get("$type", "").endswith(".Position"):
+            if ent.get("$type", "").endswith((".Position", ".ProfilePosition")):
+                company_name = (
+                    ent.get("companyResolutionResult", {}).get("name")
+                    or ent.get("companyName")
+                    or ent.get("company", {}).get("name")
+                    or None
+                )
+                company_slug = ent.get("companyResolutionResult", {}).get(
+                    "universalName"
+                ) or ent.get("company", {}).get("universalName")
+                company_url = (
+                    f"https://www.linkedin.com/company/{company_slug}"
+                    if company_slug
+                    else None
+                )
                 experiences.append(
                     ExperienceItem(
                         title=ent.get("title") or None,
-                        company=ent.get("companyName") or None,
-                        location=ent.get("locationName") or None,
+                        company=company_name,
+                        company_url=company_url,
+                        location=ent.get("locationName")
+                        or ent.get("geoLocationName")
+                        or None,
                         description=ent.get("description") or None,
-                        date_range=_format_date_range(ent.get("dateRange")),
+                        date_range=_format_date_range(
+                            ent.get("dateRange") or ent.get("timePeriod")
+                        ),
                     )
                 )
 
@@ -318,7 +362,14 @@ def parse_voyager_profile(
             for edu in elements:
                 if not isinstance(edu, dict):
                     continue
-                school_slug = edu.get("school", {}).get("universalName")
+                school_name = (
+                    edu.get("schoolResolutionResult", {}).get("name")
+                    or edu.get("schoolName")
+                    or None
+                )
+                school_slug = edu.get("schoolResolutionResult", {}).get(
+                    "universalName"
+                ) or edu.get("school", {}).get("universalName")
                 school_url = (
                     f"https://www.linkedin.com/school/{school_slug}"
                     if school_slug
@@ -326,7 +377,7 @@ def parse_voyager_profile(
                 )
                 education_items.append(
                     EducationItem(
-                        school=edu.get("schoolName") or None,
+                        school=school_name,
                         school_url=school_url,
                         degree=edu.get("degreeName") or None,
                         field_of_study=edu.get("fieldOfStudy") or None,
@@ -339,14 +390,31 @@ def parse_voyager_profile(
         for ent in included_entities:
             if not isinstance(ent, dict):
                 continue
-            if ent.get("$type", "").endswith(".Education"):
+            if ent.get("$type", "").endswith((".Education", ".ProfileEducation")):
+                school_name = (
+                    ent.get("schoolResolutionResult", {}).get("name")
+                    or ent.get("schoolName")
+                    or ent.get("school", {}).get("name")
+                    or None
+                )
+                school_slug = ent.get("schoolResolutionResult", {}).get(
+                    "universalName"
+                ) or ent.get("school", {}).get("universalName")
+                school_url = (
+                    f"https://www.linkedin.com/school/{school_slug}"
+                    if school_slug
+                    else None
+                )
                 education_items.append(
                     EducationItem(
-                        school=ent.get("schoolName") or None,
+                        school=school_name,
+                        school_url=school_url,
                         degree=ent.get("degreeName") or None,
                         field_of_study=ent.get("fieldOfStudy") or None,
                         description=ent.get("description") or None,
-                        date_range=_format_date_range(ent.get("dateRange")),
+                        date_range=_format_date_range(
+                            ent.get("dateRange") or ent.get("timePeriod")
+                        ),
                     )
                 )
 
