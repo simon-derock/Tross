@@ -270,13 +270,17 @@ class VoyagerClient:
                 )
             except Exception as err:
                 logger.warning("network.async_fallback_to_sync", error=str(err))
+
                 def _sync_fetch() -> Response:
                     with Session(
                         impersonate=self.impersonate,
                         cookies=self.cookies,
                         proxy=self.proxy_url,
                     ) as sync_session:
-                        return sync_session.get(url, headers=headers, allow_redirects=False)
+                        return sync_session.get(
+                            url, headers=headers, allow_redirects=False
+                        )
+
                 response = await asyncio.to_thread(_sync_fetch)
 
             # Redirects to login/authwall mean session is invalid or expired
