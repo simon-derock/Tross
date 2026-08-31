@@ -266,10 +266,10 @@ class VoyagerClient:
             )
 
             # Redirects to login/authwall mean session is invalid or expired
-            if response.status_code in (301, 302, 303, 307, 308):
+            if response.status_code in (301, 302, 303, 307, 308, 401, 403):
                 raise AuthenticationError(
-                    "LinkedIn session credentials (LI_AT / JSESSIONID) are invalid, expired, or missing. "
-                    "Please configure valid LI_AT and JSESSIONID in .env or provide them via X-Li-At and X-JSESSIONID headers."
+                    "LinkedIn rejected the server's session (IP flagged). "
+                    "Open Swagger UI (/docs) and provide your own fresh 'X-Li-At' and 'X-JSESSIONID' headers to bypass this."
                 )
 
             if response.status_code in RETRYABLE_STATUS_CODES:
@@ -280,12 +280,6 @@ class VoyagerClient:
                     vanity_slug=clean_slug,
                 )
                 raise _RetryableStatusError(response.status_code, response)
-
-            if response.status_code in (401, 403):
-                raise AuthenticationError(
-                    f"LinkedIn authentication failed (HTTP {response.status_code}). "
-                    "Please refresh li_at and JSESSIONID session cookies."
-                )
 
             if response.status_code == 404:
                 raise ProfileNotFoundError(

@@ -289,7 +289,9 @@ class TestGetProfileView:
                 max_retries=3,
                 backoff_seconds=0.01,
             ) as client:
-                with pytest.raises(AuthenticationError, match="authentication failed"):
+                with pytest.raises(
+                    AuthenticationError, match="LinkedIn rejected the server's session"
+                ):
                     await client.get_profile_view(FAKE_SLUG)
 
             # Must not retry on auth failures
