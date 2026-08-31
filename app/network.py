@@ -14,11 +14,12 @@ Features:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from typing import Any
 
-from curl_cffi.requests import AsyncSession, Response
+from curl_cffi.requests import AsyncSession, Response, Session
 from tenacity import (
     AsyncRetrying,
     retry_if_exception_type,
@@ -261,11 +262,22 @@ class VoyagerClient:
                 vanity_slug=clean_slug,
                 attempt=attempt_count,
             )
-            response = await self._session.get(
-                url,
-                headers=headers,
-                allow_redirects=False,
-            )
+            try:
+                response = await self._session.get(
+                    url,
+                    headers=headers,
+                    allow_redirects=False,
+                )
+            except Exception as err:
+                logger.warning("network.async_fallback_to_sync", error=str(err))
+                def _sync_fetch() -> Response:
+                    with Session(
+                        impersonate=self.impersonate,
+                        cookies=self.cookies,
+                        proxy=self.proxy_url,
+                    ) as sync_session:
+                        return sync_session.get(url, headers=headers, allow_redirects=False)
+                response = await asyncio.to_thread(_sync_fetch)
 
             # Redirects to login/authwall mean session is invalid or expired
             if response.status_code in (301, 302, 303, 307, 308, 401, 403):

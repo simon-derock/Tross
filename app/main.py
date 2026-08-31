@@ -119,6 +119,18 @@ async def handle_scraper_error(request: Request, exc: ScraperError) -> JSONRespo
     )
 
 
+@app.exception_handler(Exception)
+async def handle_unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+    logger.error("api.unhandled_exception", error=str(exc), exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content=ErrorResponse(
+            detail=f"{type(exc).__name__}: {str(exc)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        ).model_dump(),
+    )
+
+
 # ── Navigation & Root Redirect ────────────────────────────────────────────────
 
 
