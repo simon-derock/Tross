@@ -172,12 +172,14 @@ async def scrape_profile(
             override_cookies.get("li_at")
             or override_cookies.get("X-Li-At")
             or override_cookies.get("x-li-at")
+            or settings.li_at
         )
         jsessionid = (
             override_cookies.get("JSESSIONID")
             or override_cookies.get("jsessionid")
             or override_cookies.get("X-JSESSIONID")
             or override_cookies.get("x-jsessionid")
+            or settings.jsessionid
         )
     else:
         li_at = settings.li_at

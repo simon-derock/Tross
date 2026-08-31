@@ -77,7 +77,7 @@ async def handle_auth_error(request: Request, exc: AuthenticationError) -> JSONR
     return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
         content=ErrorResponse(
-            detail=f"LinkedIn authentication failure: {exc}",
+            detail=str(exc),
             status_code=status.HTTP_401_UNAUTHORIZED,
         ).model_dump(),
     )
