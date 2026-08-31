@@ -1,12 +1,18 @@
 # Tross — LinkedIn Profile API (Reverse-Engineered)
 
+[![Live API Docs](https://img.shields.io/badge/Live%20Docs-Swagger%20UI-009688.svg?style=for-the-badge&logo=swagger)](https://tross-api.vercel.app/docs)
+[![Live Web Playground](https://img.shields.io/badge/Web%20Playground-Active-brightgreen.svg?style=for-the-badge)](https://tross-api.vercel.app/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
-[![uv](https://img.shields.io/badge/managed%20by-uv-DE5FE9.svg)](https://github.com/astral-sh/uv)
 [![CI](https://github.com/simon-derock/Tross/actions/workflows/ci.yml/badge.svg)](https://github.com/simon-derock/Tross/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-116%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-118%20passed-brightgreen.svg)]()
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
+> **Live Deployment:**
+> - 🌐 **Interactive Swagger UI:** [https://tross-api.vercel.app/docs](https://tross-api.vercel.app/docs)
+> - ⚡ **Web Playground:** [https://tross-api.vercel.app/](https://tross-api.vercel.app/)
+> - 📡 **Scrape Endpoint:** `POST https://tross-api.vercel.app/api/profile`
+>
 > **Tross** is a high-precision, production-ready backend API that reverse-engineers LinkedIn's internal **Voyager REST API**. It accepts a LinkedIn profile URL over an HTTPS POST request and returns comprehensive, structured, typed JSON profile data.
 >
 > Developed by **PHILIP SIMON DEROCK**. Built with **Python 3.12+**, **FastAPI**, **curl_cffi** (Chrome 131 TLS impersonation), and native **Swagger UI** (`/docs`). Deployed serverless on **Vercel**.
@@ -330,5 +336,4 @@ Tross is configured out-of-the-box for serverless deployment on Vercel:
 ## 👤 Author
 
 **PHILIP SIMON DEROCK**  
-*Lead Software Engineer & Systems Architect*  
 GitHub: [@simon-derock](https://github.com/simon-derock)
