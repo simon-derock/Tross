@@ -39,9 +39,8 @@ class TestSettingsValidation:
         s = Settings(
             _env_file=None, **_valid_overrides(jsessionid='"ajax:1234567890123456789"')
         )
-        assert s.jsessionid == "1234567890123456789"
+        assert s.jsessionid == "ajax:1234567890123456789"
         assert '"' not in s.jsessionid
-        assert "ajax:" not in s.jsessionid
 
     def test_li_at_cookie_alias(self):
         s = Settings(

@@ -54,8 +54,8 @@ class Settings(BaseSettings):
     @field_validator("jsessionid")
     @classmethod
     def strip_jsessionid_quotes(cls, v: str) -> str:
-        """LinkedIn sometimes wraps JSESSIONID in quotes or prefixes with ajax: — clean it."""
-        return v.replace("ajax:", "").strip('"').strip()
+        """LinkedIn wraps JSESSIONID in quotes — clean outer quotes while preserving value."""
+        return v.strip('"').strip()
 
 
 @lru_cache(maxsize=1)
