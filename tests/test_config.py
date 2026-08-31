@@ -55,3 +55,16 @@ class TestSettingsValidation:
             **_valid_overrides(proxy_url="http://user:pass@proxy.com:8080"),
         )
         assert s.proxy_url == "http://user:pass@proxy.com:8080"
+
+    def test_empty_strings_fallback_to_defaults(self):
+        s = Settings(
+            _env_file=None,
+            log_level="",
+            max_retries="",
+            retry_backoff_seconds="",
+            proxy_url="",
+        )
+        assert s.log_level == "INFO"
+        assert s.max_retries == 3
+        assert s.retry_backoff_seconds == 2.0
+        assert s.proxy_url is None
